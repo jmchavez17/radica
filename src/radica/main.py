@@ -8,8 +8,6 @@ Servir la API (desde la raíz del proyecto):
     uvicorn --factory radica.main:crear_aplicacion
 """
 
-import re
-import unicodedata
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import datetime
@@ -20,6 +18,7 @@ from radica.adaptadores.entrada.api.app import crear_app
 from radica.adaptadores.entrada.api.casos import CasosDeUso
 from radica.adaptadores.salida.cifrado.aes_gcm import CifradorAesGcm
 from radica.adaptadores.salida.enmascarador.reglas import EnmascaradorReglas
+from radica.adaptadores.salida.palabras_clave.clasificador import ClasificadorPalabrasClave
 from radica.adaptadores.salida.postgres.repositorios import (
     AuditoriaRepositoryPostgres,
     ConfiguracionRepositoryPostgres,
@@ -34,49 +33,13 @@ from radica.aplicacion.casos_de_uso.consultas import (
     ListarTerminos,
 )
 from radica.aplicacion.casos_de_uso.registrar_pqrs import RegistrarPqrs
-from radica.aplicacion.puertos.clasificador import (
-    ClasificadorPqrs,
-    ResultadoClasificacion,
-    SolicitudClasificacion,
-)
+from radica.aplicacion.puertos.clasificador import ClasificadorPqrs
 from radica.config import Configuracion, cargar
 from radica.dominio.plazos import ZONA_COLOMBIA, CalculadoraDePlazos
 from radica.dominio.semaforo import ReglaSemaforo
-from radica.dominio.valores import NivelRiesgo, TipoPqrs
 
 VERSION_INSTRUCCIONES = "clasif-v1.0"
 ID_USUARIO_ACTOR = 1  # «Funcionario Sintético»: sin autenticación en esta entrega (contexto.md 4.12)
-
-
-class ClasificadorProvisionalMinimo:
-    """TEMPORAL (contexto.md 4.5): unas pocas palabras mientras entra la rama de Isabella.
-
-    Lo reemplaza ClasificadorPalabrasClave, con su diccionario versionado.
-    """
-
-    # (patrón sobre el texto sin tildes y en minúsculas, tipo, nivel, id_area)
-    REGLAS = (
-        (r"\briesgo vital\b", TipoPqrs.RECLAMO, NivelRiesgo.VITAL, None),
-        (r"\bautorizacion(es)?\b", TipoPqrs.RECLAMO, NivelRiesgo.SIMPLE, 4),
-        (r"\bcitas?\b", TipoPqrs.RECLAMO, NivelRiesgo.SIMPLE, 2),
-        (r"\bmedicamentos?\b", TipoPqrs.RECLAMO, NivelRiesgo.SIMPLE, 6),
-        (r"\btrato\b|\bgroser[oa]s?\b", TipoPqrs.QUEJA, NivelRiesgo.NO_APLICA, None),
-    )
-
-    def clasificar(self, solicitud: SolicitudClasificacion) -> ResultadoClasificacion:
-        texto = "".join(
-            letra
-            for letra in unicodedata.normalize("NFKD", solicitud.texto_enmascarado.casefold())
-            if not unicodedata.combining(letra)
-        )
-        for patron, tipo, nivel, id_area in self.REGLAS:
-            encontrado = re.search(patron, texto)
-            if encontrado:
-                senales = (encontrado.group(),) if nivel is NivelRiesgo.VITAL else ()
-                return ResultadoClasificacion(
-                    tipo, None, id_area, nivel, confianza=0.5, senales_riesgo=senales
-                )
-        return ResultadoClasificacion(TipoPqrs.PETICION, None, None, NivelRiesgo.NO_APLICA, 0.5)
 
 
 def ahora_en_colombia() -> datetime:
@@ -93,7 +56,7 @@ def componer(
     motor = crear_motor(configuracion.url_base_datos)
     cifrador = CifradorAesGcm(configuracion.llave_cifrado, configuracion.llave_hmac)
     enmascarador = EnmascaradorReglas()
-    clasificador = clasificador_provisional or ClasificadorProvisionalMinimo()
+    clasificador = clasificador_provisional or ClasificadorPalabrasClave()
     calculadora = CalculadoraDePlazos()
     semaforo = ReglaSemaforo(configuracion.umbral_amarillo)
 

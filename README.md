@@ -9,7 +9,8 @@ Hoy contiene:
 - El registro de PQRS por API: cifrado AES-256-GCM de los datos del peticionario con HMAC del documento, enmascaramiento por reglas, clasificación provisional, cálculo del vencimiento y auditoría, todo en una sola transacción.
 - La consulta de una PQRS, la bandeja con semáforo, el historial de auditoría y la tabla de términos vigente.
 - Las reglas puras del dominio: selección del término, CalculadoraDePlazos y semáforo.
-- El puerto `ClasificadorPqrs` y su contrato. La clasificación provisional usa por ahora un clasificador mínimo en `main.py`, que reemplazará `ClasificadorPalabrasClave`.
+- El puerto `ClasificadorPqrs` y su contrato. La clasificación provisional la hace `ClasificadorPalabrasClave`, con su diccionario versionado en `src/radica/adaptadores/salida/palabras_clave/diccionario.json`.
+- 12 PQRS sintéticas para la demostración en `datos/sinteticos/demo.json`, con el formato de entrada de `POST /api/v1/pqrs`.
 - PostgreSQL 16 en Docker Compose y dos migraciones de Alembic: las 13 tablas del modelo de datos v1.1 y los datos semilla.
 - Pruebas unitarias y de integración contra PostgreSQL.
 

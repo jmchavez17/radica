@@ -1,0 +1,170 @@
+[
+  {
+    "canal": "WEB",
+    "sede": "Sede clínica",
+    "fechaRadicacion": "2026-10-29T08:30:00-05:00",
+    "texto": "Mi hijo de 6 años tuvo convulsiones y en urgencias no lo atienden. Mi cédula es 1000000001 y mi celular 3000000001.",
+    "pacienteMenorDeEdad": true,
+    "peticionario": {
+      "tipoDocumento": "CC",
+      "numeroDocumento": "1000000001",
+      "nombre": "Usuario Sintético Uno",
+      "telefono": "3000000001",
+      "correo": "usuario01@radica.test"
+    }
+  },
+  {
+    "canal": "VERBAL",
+    "sede": "Sede clínica",
+    "fechaRadicacion": "2026-10-29T14:00:00-05:00",
+    "texto": "Mi papá tuvo un infarto y la ambulancia nunca llegó. Escribí desde usuario02@radica.test y nadie me contesta.",
+    "pacienteMenorDeEdad": false,
+    "peticionario": {
+      "tipoDocumento": "CC",
+      "numeroDocumento": "1000000002",
+      "nombre": "Usuario Sintético Dos",
+      "telefono": "3000000002",
+      "correo": "usuario02@radica.test"
+    }
+  },
+  {
+    "canal": "DIME",
+    "sede": "Sede norte",
+    "fechaRadicacion": "2026-10-30T09:00:00-05:00",
+    "texto": "Estoy embarazada y hace un mes no me han dado la cita de control.",
+    "pacienteMenorDeEdad": false,
+    "peticionario": {
+      "tipoDocumento": "CC",
+      "numeroDocumento": "1000000003",
+      "nombre": "Usuario Sintético Tres",
+      "telefono": "3000000003",
+      "correo": "usuario03@radica.test"
+    }
+  },
+  {
+    "canal": "WEB",
+    "sede": "Sede clínica",
+    "fechaRadicacion": "2026-10-30T11:15:00-05:00",
+    "texto": "Soy paciente de diálisis y me cancelaron la sesión de esta semana.",
+    "pacienteMenorDeEdad": false,
+    "peticionario": {
+      "tipoDocumento": "CC",
+      "numeroDocumento": "1000000004",
+      "nombre": "Usuario Sintético Cuatro",
+      "telefono": "3000000004",
+      "correo": "usuario04@radica.test"
+    }
+  },
+  {
+    "canal": "DIME",
+    "sede": "Sede clínica",
+    "fechaRadicacion": "2026-10-30T16:00:00-05:00",
+    "texto": "Desde hace tres semanas me ordenaron una resonancia y no me han dado la autorización. Mi teléfono es 3000000005.",
+    "pacienteMenorDeEdad": false,
+    "peticionario": {
+      "tipoDocumento": "CC",
+      "numeroDocumento": "1000000005",
+      "nombre": "Usuario Sintético Cinco",
+      "telefono": "3000000005",
+      "correo": "usuario05@radica.test"
+    }
+  },
+  {
+    "canal": "APLICATIVO_EPS",
+    "sede": "Sede norte",
+    "fechaRadicacion": "2026-10-30T17:20:00-05:00",
+    "texto": "No me entregaron los medicamentos completos en la farmacia de la sede norte.",
+    "pacienteMenorDeEdad": false,
+    "peticionario": {
+      "tipoDocumento": "CC",
+      "numeroDocumento": "1000000006",
+      "nombre": "Usuario Sintético Seis",
+      "telefono": "3000000006",
+      "correo": "usuario06@radica.test"
+    }
+  },
+  {
+    "canal": "CORREO",
+    "sede": "Sede clínica",
+    "fechaRadicacion": "2026-10-28T10:00:00-05:00",
+    "texto": "Me cobraron un copago que ya había pagado en la factura anterior.",
+    "pacienteMenorDeEdad": false,
+    "peticionario": {
+      "tipoDocumento": "CC",
+      "numeroDocumento": "1000000007",
+      "nombre": "Usuario Sintético Siete",
+      "telefono": "3000000007",
+      "correo": "usuario07@radica.test"
+    }
+  },
+  {
+    "canal": "CARTA",
+    "sede": "Sede clínica",
+    "fechaRadicacion": "2026-10-13T09:30:00-05:00",
+    "texto": "Presento una queja porque la recepcionista fue grosera conmigo.",
+    "pacienteMenorDeEdad": false,
+    "peticionario": {
+      "tipoDocumento": "CC",
+      "numeroDocumento": "1000000008",
+      "nombre": "Usuario Sintético Ocho",
+      "telefono": "3000000008",
+      "correo": "usuario08@radica.test"
+    }
+  },
+  {
+    "canal": "BUZON",
+    "sede": "Sede norte",
+    "fechaRadicacion": "2026-10-20T08:00:00-05:00",
+    "texto": "Sugiero ampliar los horarios de atención de la sede norte los sábados.",
+    "pacienteMenorDeEdad": false,
+    "peticionario": {
+      "tipoDocumento": "CC",
+      "numeroDocumento": "1000000009",
+      "nombre": "Usuario Sintético Nueve",
+      "telefono": "3000000009",
+      "correo": "usuario09@radica.test"
+    }
+  },
+  {
+    "canal": "CORREO",
+    "sede": "Sede clínica",
+    "fechaRadicacion": "2026-10-30T10:00:00-05:00",
+    "texto": "Solicito copia de mi historia clínica n.º 900010 para un trámite.",
+    "pacienteMenorDeEdad": false,
+    "peticionario": {
+      "tipoDocumento": "CC",
+      "numeroDocumento": "1000000010",
+      "nombre": "Usuario Sintético Diez",
+      "telefono": "3000000010",
+      "correo": "usuario10@radica.test"
+    }
+  },
+  {
+    "canal": "WEB",
+    "sede": "Sede clínica",
+    "fechaRadicacion": "2026-10-26T15:45:00-05:00",
+    "texto": "Tengo una consulta: ¿cuál es el procedimiento para cambiar de sede?",
+    "pacienteMenorDeEdad": false,
+    "peticionario": {
+      "tipoDocumento": "CC",
+      "numeroDocumento": "1000000011",
+      "nombre": "Usuario Sintético Once",
+      "telefono": "3000000011",
+      "correo": "usuario11@radica.test"
+    }
+  },
+  {
+    "canal": "CARTA",
+    "sede": "Sede clínica",
+    "fechaRadicacion": "2026-10-30T14:30:00-05:00",
+    "texto": "Necesito que me actualicen el correo de contacto a usuario12@radica.test.",
+    "pacienteMenorDeEdad": false,
+    "peticionario": {
+      "tipoDocumento": "CC",
+      "numeroDocumento": "1000000012",
+      "nombre": "Usuario Sintético Doce",
+      "telefono": "3000000012",
+      "correo": "usuario12@radica.test"
+    }
+  }
+]

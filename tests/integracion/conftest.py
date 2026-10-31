@@ -6,6 +6,7 @@ No se vacía con TRUNCATE porque la auditoría es de solo inserción. Si
 RADICA_DB_URL no está definida, las pruebas se omiten.
 """
 
+import os
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -15,9 +16,20 @@ from alembic.config import Config
 from sqlalchemy import Engine, create_engine, make_url, text
 
 from radica.adaptadores.salida.postgres.repositorios import crear_motor
-from radica.config import ConfiguracionIncompleta, url_base_datos
+from radica.config import Configuracion, ConfiguracionIncompleta, url_base_datos
 
 RAIZ = Path(__file__).resolve().parents[2]
+
+
+@pytest.fixture(scope="module")
+def configuracion_pruebas(motor_migrado: Engine) -> Configuracion:
+    """Configuración sobre la base temporal, con llaves generadas aquí (nunca las del .env)."""
+    return Configuracion(
+        url_base_datos=motor_migrado.url.render_as_string(hide_password=False),
+        llave_cifrado=os.urandom(32),
+        llave_hmac=os.urandom(32),
+        umbral_amarillo=0.5,
+    )
 
 
 @pytest.fixture(scope="module")

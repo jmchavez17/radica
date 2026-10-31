@@ -31,6 +31,13 @@ PERMITIDOS = {
         "radica.aplicacion",
         "radica.adaptadores.salida.palabras_clave",
     ),
+    "adaptadores/salida/ia": (
+        "radica.dominio",
+        "radica.aplicacion",
+        "radica.adaptadores.salida.ia",
+        "anthropic",
+        "pydantic",
+    ),
 }
 
 

@@ -1,6 +1,7 @@
 """Contrato del puerto ClasificadorPqrs: lo que toda implementación puede suponer."""
 
 from dataclasses import FrozenInstanceError
+from decimal import Decimal
 
 import pytest
 
@@ -8,10 +9,13 @@ from radica.aplicacion.puertos.clasificador import (
     AreaCatalogo,
     Catalogo,
     ClasificadorPqrs,
+    ProveedorNoDisponible,
     ResultadoClasificacion,
+    SalidaInvalida,
     SolicitudClasificacion,
+    UsoIA,
 )
-from radica.dominio.valores import NivelRiesgo, TipoPqrs
+from radica.dominio.valores import NivelRiesgo, ResultadoLlamadaIA, TipoPqrs
 
 
 def _resultado(**cambios: object) -> ResultadoClasificacion:
@@ -31,6 +35,51 @@ def test_los_campos_opcionales_tienen_valores_por_defecto() -> None:
     assert dict(resultado.datos_clave) == {}
     assert resultado.senales_riesgo == ()
     assert resultado.uso is None
+    assert resultado.intentos_fallidos == ()
+
+
+# Extensión de la sesión 4 (acordada con Isabella): cada intento es una fila de llamada_ia.
+
+def _uso(**cambios: object) -> UsoIA:
+    campos: dict[str, object] = {
+        "proveedor": "anthropic",
+        "modelo": "claude-haiku-5-5",
+        "tokens_entrada": 0,
+        "tokens_salida": 0,
+        "costo_usd": Decimal(0),
+        "latencia_ms": 15000,
+    }
+    return UsoIA(**(campos | cambios))  # type: ignore[arg-type]
+
+
+def test_un_uso_sin_intento_ni_resultado_es_el_primer_intento_ok() -> None:
+    uso = _uso()
+    assert uso.intento == 1
+    assert uso.resultado is ResultadoLlamadaIA.OK
+
+
+def test_el_resultado_lleva_los_intentos_fallidos_en_orden() -> None:
+    fallidos = (
+        _uso(intento=1, resultado=ResultadoLlamadaIA.TIMEOUT),
+        _uso(intento=2, resultado=ResultadoLlamadaIA.LIMITE_CUOTA),
+    )
+    resultado = _resultado(uso=_uso(intento=3), intentos_fallidos=fallidos)
+    assert [uso.intento for uso in resultado.intentos_fallidos] == [1, 2]
+    assert resultado.uso is not None and resultado.uso.intento == 3
+
+
+@pytest.mark.parametrize("error", [ProveedorNoDisponible, SalidaInvalida])
+def test_los_errores_del_puerto_pueden_llevar_sus_intentos(error: type[Exception]) -> None:
+    intentos = (_uso(resultado=ResultadoLlamadaIA.SALIDA_INVALIDA),)
+    with pytest.raises(error) as capturado:
+        raise error("sin respuesta válida", intentos)  # type: ignore[call-arg]
+    assert capturado.value.intentos == intentos  # type: ignore[attr-defined]
+    assert str(capturado.value) == "sin respuesta válida"
+
+
+@pytest.mark.parametrize("error", [ProveedorNoDisponible, SalidaInvalida])
+def test_sin_intentos_los_errores_siguen_funcionando_como_antes(error: type[Exception]) -> None:
+    assert error().intentos == ()  # type: ignore[attr-defined]
 
 
 @pytest.mark.parametrize("confianza", [0, 0.75, 1])

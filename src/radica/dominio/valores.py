@@ -101,6 +101,17 @@ class AccionAuditoria(StrEnum):
     REINTENTO_IA = "REINTENTO_IA"
 
 
+class ResultadoLlamadaIA(StrEnum):
+    """Resultado de un intento de llamada a un proveedor de IA (columna llamada_ia.resultado)."""
+
+    OK = "OK"
+    TIMEOUT = "TIMEOUT"
+    LIMITE_CUOTA = "LIMITE_CUOTA"
+    ERROR_PROVEEDOR = "ERROR_PROVEEDOR"
+    CREDENCIAL_INVALIDA = "CREDENCIAL_INVALIDA"
+    SALIDA_INVALIDA = "SALIDA_INVALIDA"
+
+
 class Regimen(StrEnum):
     """Régimen normativo de un término legal."""
 

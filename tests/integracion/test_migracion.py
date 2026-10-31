@@ -18,7 +18,18 @@ from sqlalchemy import URL, Connection, Engine, create_engine, make_url, text
 from sqlalchemy.exc import DBAPIError
 
 from radica.config import ConfiguracionIncompleta, url_base_datos
-from radica.dominio.valores import Canal, EstadoIa, EstadoPqrs, NivelRiesgo, TipoPqrs
+from radica.dominio.valores import (
+    Canal,
+    EstadoIa,
+    EstadoPqrs,
+    NivelRiesgo,
+    OrigenClasificacion,
+    OrigenEvento,
+    Poblacion,
+    Regimen,
+    TipoPqrs,
+    Unidad,
+)
 
 RAIZ = Path(__file__).resolve().parents[2]
 
@@ -59,6 +70,11 @@ CHECKS_DEL_DOMINIO: dict[str, type[StrEnum]] = {
     "ck_pqrs_canal": Canal,
     "ck_pqrs_estado": EstadoPqrs,
     "ck_pqrs_estado_ia": EstadoIa,
+    "ck_clasificacion_origen": OrigenClasificacion,
+    "ck_auditoria_origen": OrigenEvento,
+    "ck_termino_legal_regimen": Regimen,
+    "ck_termino_legal_poblacion": Poblacion,
+    "ck_termino_legal_unidad": Unidad,
 }
 
 

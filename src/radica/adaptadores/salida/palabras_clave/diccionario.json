@@ -1,0 +1,114 @@
+{
+  "version": "1.0",
+  "nota": "SUPUESTO del equipo: palabras por validar con la IPS en V3 (contexto.md 4.5 y 7). Se comparan sin tildes ni mayúsculas y como palabras completas. El orden de evaluación lo fija ClasificadorPalabrasClave; en areas, gana la primera que coincida.",
+  "vital": [
+    "riesgo vital", "peligro de muerte", "riesgo de muerte",
+    "se está muriendo", "se puede morir", "puede morir", "se va a morir", "murió", "falleció",
+    "paro cardíaco", "paro respiratorio", "infarto", "derrame cerebral",
+    "hemorragia", "sangrado abundante",
+    "no respira", "dificultad para respirar",
+    "convulsión", "convulsiones", "inconsciente", "perdió el conocimiento",
+    "sobredosis", "intoxicación", "suicidio", "quitarse la vida", "sepsis",
+    "uci", "cuidados intensivos"
+  ],
+  "priorizado": [
+    "riesgo priorizado",
+    "cáncer", "quimioterapia", "radioterapia", "oncología",
+    "diálisis", "hemodiálisis", "trasplante", "vih", "enfermedad huérfana",
+    "gestante", "embarazada", "embarazo",
+    "adulto mayor", "adultos mayores", "discapacidad",
+    "insulina", "oxígeno",
+    "suspendieron el tratamiento", "interrumpieron el tratamiento", "sin tratamiento",
+    "dolor intenso", "dolor severo", "está empeorando", "empeoró"
+  ],
+  "reclamo": [
+    "reclamo", "reclamar",
+    "demora", "demoras", "demoran", "demorado", "demorada", "retraso", "retrasos",
+    "no me han dado", "no me dieron", "no me dan",
+    "no me entregan", "no me entregaron", "no me han entregado", "no han entregado",
+    "entrega incompleta", "medicamento equivocado",
+    "no me atienden", "no me atendieron", "no me han atendido", "no lo atienden", "no la atienden",
+    "no me autorizan", "no autorizaron", "no me han autorizado", "sin autorización",
+    "negaron", "cancelaron", "se canceló", "reprogramaron",
+    "no hay citas", "no hay agenda", "no hay medicamento",
+    "cobro indebido", "me cobraron", "cobraron de más",
+    "esperando", "no contestan", "no responden"
+  ],
+  "queja": [
+    "queja", "quejas", "me quejo",
+    "mal trato", "maltrato", "maltrataron",
+    "grosero", "grosera", "groseros", "groseras", "grosería",
+    "irrespetuoso", "irrespetuosa", "irrespeto",
+    "me gritaron", "me gritó", "descortés", "mala atención", "mala actitud"
+  ],
+  "sugerencia": [
+    "sugerencia", "sugerencias", "sugiero", "sugerimos", "propongo", "propuesta",
+    "deberían", "sería bueno", "sería conveniente", "podrían mejorar"
+  ],
+  "solicitud_informacion": [
+    "solicito información", "solicitud de información", "pido información",
+    "requiero información", "necesito información",
+    "solicito copia", "solicito copias", "copia de mi", "copia de la",
+    "certificado", "certificación", "constancia", "epicrisis"
+  ],
+  "consulta": [
+    "tengo una consulta", "hago una consulta", "mi consulta es", "consulta sobre",
+    "quiero consultar", "quisiera consultar", "deseo consultar",
+    "cuál es el procedimiento", "qué requisitos", "qué debo hacer"
+  ],
+  "areas": [
+    {
+      "id_area": 4,
+      "nombre": "Autorizaciones",
+      "palabras": [
+        "autorización", "autorizaciones", "autorizar", "autorizan", "autorizaron",
+        "autorizado", "autorizada"
+      ]
+    },
+    {
+      "id_area": 6,
+      "nombre": "Farmacia",
+      "palabras": [
+        "medicamento", "medicamentos", "medicina", "medicinas", "farmacia",
+        "fórmula médica", "insulina", "pastillas"
+      ]
+    },
+    {
+      "id_area": 5,
+      "nombre": "Facturación",
+      "palabras": [
+        "factura", "facturas", "facturación", "cobro", "cobros", "cobraron",
+        "copago", "copagos", "cuota moderadora"
+      ]
+    },
+    {
+      "id_area": 3,
+      "nombre": "Archivo clínico",
+      "palabras": ["historia clínica", "certificado", "certificación", "constancia", "epicrisis"]
+    },
+    {
+      "id_area": 2,
+      "nombre": "Citas",
+      "palabras": ["cita", "citas", "agenda", "agendar", "reprogramar", "reprogramaron"]
+    },
+    {
+      "id_area": 7,
+      "nombre": "Servicios asistenciales",
+      "palabras": [
+        "urgencias", "cirugía", "hospitalización", "uci", "cuidados intensivos",
+        "médico", "médica", "doctor", "doctora", "enfermera", "enfermero", "especialista",
+        "examen", "exámenes", "laboratorio", "resonancia", "terapia",
+        "quimioterapia", "radioterapia", "diálisis", "hemodiálisis", "consulta externa"
+      ]
+    },
+    {
+      "id_area": 1,
+      "nombre": "Atención al usuario",
+      "palabras": [
+        "atención al usuario", "funcionario", "funcionaria", "recepcionista", "vigilante",
+        "ventanilla", "horario", "horarios", "sede", "turno", "turnos",
+        "mal trato", "maltrato", "mala atención"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+meta {
+  name: Reintentar la clasificación con IA
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/v1/pqrs/{{idPqrs}}/clasificaciones
+  body: none
+  auth: none
+}
+
+docs {
+  202 {id, estadoIa: PENDIENTE} y el trabajador la clasifica otra vez.
+  409 si todavía está PENDIENTE (por ejemplo, justo después de registrarla) o si está RESPONDIDA o CERRADA.
+}

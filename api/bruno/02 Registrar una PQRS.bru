@@ -1,0 +1,41 @@
+meta {
+  name: Registrar una PQRS
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/v1/pqrs
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "canal": "DIME",
+    "sede": "Sede clínica",
+    "fechaRadicacion": "2026-10-30T16:00:00-05:00",
+    "texto": "Desde hace tres semanas me ordenaron una resonancia y no me han dado la autorización. Llamé dos veces y nadie responde. Mi teléfono es 3000000000.",
+    "pacienteMenorDeEdad": false,
+    "peticionario": {
+      "tipoDocumento": "CC",
+      "numeroDocumento": "1000000001",
+      "nombre": "Usuario Sintético Uno",
+      "telefono": "3000000000",
+      "correo": "usuario1@ejemplo.com"
+    }
+  }
+}
+
+vars:post-response {
+  idPqrs: res.body.id
+}
+
+assert {
+  res.status: eq 201
+}
+
+docs {
+  HU-01. Datos sintéticos. Guarda el id en la variable idPqrs para las solicitudes siguientes.
+  La respuesta trae la clasificación provisional por reglas; la de IA la hace después el trabajador.
+}

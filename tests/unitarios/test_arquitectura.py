@@ -1,7 +1,9 @@
 """Regla de dependencias de la arquitectura hexagonal (ADR-01).
 
 dominio solo importa la biblioteca estándar y el propio dominio; aplicacion
-importa además el dominio, nunca adaptadores ni librerías externas.
+importa además el dominio, nunca adaptadores ni librerías externas. La API
+(adaptador de entrada) usa FastAPI y el núcleo, nunca SQLAlchemy, los
+adaptadores de salida ni la configuración: eso lo conecta main.py.
 """
 
 import ast
@@ -16,6 +18,14 @@ PAQUETE = Path(__file__).resolve().parents[2] / "src" / "radica"
 PERMITIDOS = {
     "dominio": ("radica.dominio",),
     "aplicacion": ("radica.dominio", "radica.aplicacion"),
+    "adaptadores/entrada/api": (
+        "radica.dominio",
+        "radica.aplicacion",
+        "radica.adaptadores.entrada.api",
+        "fastapi",
+        "pydantic",
+        "starlette",
+    ),
 }
 
 
@@ -46,6 +56,10 @@ def test_la_regla_detecta_imports_prohibidos() -> None:
     assert not _permitido("sqlalchemy", capas)
     assert not _permitido("radica.adaptadores.salida.postgres", capas)
     assert not _permitido("radica.config", capas)
+    api = PERMITIDOS["adaptadores/entrada/api"]
+    assert _permitido("fastapi.responses", api)
+    assert not _permitido("sqlalchemy", api)
+    assert not _permitido("radica.adaptadores.salida.postgres.repositorios", api)
 
 
 @pytest.mark.parametrize("capa", sorted(PERMITIDOS))

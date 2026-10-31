@@ -4,16 +4,16 @@ Asistente de gestión de PQRS (peticiones, quejas, reclamos y sugerencias) para 
 
 ## Estado actual
 
-Esta es la base común sobre la que se construye la Entrega 3. Hoy contiene:
+Hoy contiene:
 
-- La estructura de la arquitectura hexagonal en `src/radica/`. Las carpetas de adaptadores están vacías.
-- Los tipos de valor del dominio: tipo de PQRS, nivel de riesgo, canal, estado y estado de IA.
-- El puerto `ClasificadorPqrs` y su contrato (`SolicitudClasificacion`, `ResultadoClasificacion`), sin implementaciones.
-- PostgreSQL 16 en Docker Compose.
-- Dos migraciones de Alembic: las 13 tablas del modelo de datos v1.1 y los datos semilla (calendario y festivos de Colombia 2026–2027, tabla de términos, áreas, atributos y un usuario sintéticos).
-- Pruebas de las migraciones, de la regla de dependencias y del contrato de clasificación.
+- El registro de PQRS por API: cifrado AES-256-GCM de los datos del peticionario con HMAC del documento, enmascaramiento por reglas, clasificación provisional, cálculo del vencimiento y auditoría, todo en una sola transacción.
+- La consulta de una PQRS, la bandeja con semáforo, el historial de auditoría y la tabla de términos vigente.
+- Las reglas puras del dominio: selección del término, CalculadoraDePlazos y semáforo.
+- El puerto `ClasificadorPqrs` y su contrato. La clasificación provisional usa por ahora un clasificador mínimo en `main.py`, que reemplazará `ClasificadorPalabrasClave`.
+- PostgreSQL 16 en Docker Compose y dos migraciones de Alembic: las 13 tablas del modelo de datos v1.1 y los datos semilla.
+- Pruebas unitarias y de integración contra PostgreSQL.
 
-Todavía no hay API, casos de uso ni integración con IA.
+Todavía no hay clasificación con IA, trabajador ni reintento manual (`POST /pqrs/{id}/clasificaciones`).
 
 ## Requisitos
 
@@ -38,12 +38,34 @@ pytest
 
 La base queda en `127.0.0.1:5433`. Usa esa dirección y no `localhost` en `RADICA_DB_URL`: en Windows, `localhost` prueba primero `::1` y cada conexión tarda minutos. Las pruebas de integración crean y borran su propia base temporal. Si `RADICA_DB_URL` no está definida, se omiten.
 
+## Levantar la API
+
+`.env` debe tener además `RADICA_LLAVE_CIFRADO` y `RADICA_LLAVE_HMAC`, distintas entre sí; `.env.example` explica cómo generarlas. Sin ellas la API no arranca.
+
+```powershell
+docker compose up -d db
+alembic upgrade head
+uvicorn --factory radica.main:crear_aplicacion
+```
+
+Swagger queda en http://127.0.0.1:8000/docs y la ruta técnica en http://127.0.0.1:8000/health. Rutas implementadas, bajo `/api/v1`:
+
+| Ruta | Qué hace |
+| --- | --- |
+| `POST /pqrs` | Registra una PQRS; responde 201 con `Location` |
+| `GET /pqrs` | Bandeja con semáforo, paginada y con filtros `semaforo`, `estado`, `tipo` e `idArea` |
+| `GET /pqrs/{id}` | Detalle con la clasificación vigente y el texto enmascarado |
+| `GET /pqrs/{id}/historial` | Eventos de auditoría en orden cronológico |
+| `GET /configuracion/terminos` | Términos legales vigentes |
+
+Los errores salen en Problem Details (`application/problem+json`); la validación responde 400.
+
 ## Estructura
 
 ```
 src/radica/
-  dominio/          tipos de valor; luego entidades y reglas puras
-  aplicacion/       puertos; luego casos de uso
+  dominio/          valores, entidades y reglas puras (plazos, semáforo)
+  aplicacion/       puertos y casos de uso
   adaptadores/      entrada (api, trabajador) y salida (postgres, ia, enmascarador, palabras_clave, cifrado)
   config.py         variables de entorno
   main.py           raíz de composición

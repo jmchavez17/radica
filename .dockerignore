@@ -1,0 +1,19 @@
+# Nunca entran a la imagen: secretos, entornos locales y lo que la aplicación no usa.
+.env
+.env.*
+.venv/
+venv/
+.git/
+.gitignore
+.gitattributes
+**/__pycache__/
+**/*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+tests/
+docs/
+datos/
+api/
+.claude/

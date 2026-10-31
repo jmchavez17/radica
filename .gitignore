@@ -1,0 +1,16 @@
+# Entornos virtuales
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+
+# Secretos: nunca se suben. Solo .env.example, que no lleva valores sensibles.
+.env
+.env.*
+!.env.example

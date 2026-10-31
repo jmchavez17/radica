@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools==84.2.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "radica"
+version = "0.1.0"
+description = "Asistente de gestión de PQRS con plazos legales (MVP del diplomado, Módulo 3)."
+requires-python = ">=3.12,<3.13"
+authors = [
+    { name = "Jose Miguel Chávez Figueroa" },
+    { name = "Isabella Castaño Muñoz" },
+]
+dependencies = [
+    "SQLAlchemy==2.1.6",
+    "alembic==1.20.1",
+    "psycopg[binary]==3.3.6",
+    "python-dotenv==1.2.4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==9.2.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"

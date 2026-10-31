@@ -26,6 +26,11 @@ PERMITIDOS = {
         "pydantic",
         "starlette",
     ),
+    "adaptadores/salida/palabras_clave": (
+        "radica.dominio",
+        "radica.aplicacion",
+        "radica.adaptadores.salida.palabras_clave",
+    ),
 }
 
 

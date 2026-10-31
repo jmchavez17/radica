@@ -12,8 +12,9 @@ from radica.adaptadores.entrada.api.errores import TIPO_CONTENIDO, problema, reg
 from radica.adaptadores.entrada.api.rutas import crear_rutas
 
 DESCRIPCION = """
-API del asistente de gestión de PQRS Radica (Entrega 3). Implementa 5 de las
+API del asistente de gestión de PQRS Radica (Entrega 3). Implementa 6 de las
 13 operaciones del contrato `docs/api/radica-api-v0.1.yaml` más `GET /health`.
+La clasificación con IA la hace en segundo plano el trabajador (`radica-trabajador`).
 
 - JSON en camelCase; fechas ISO 8601 con zona horaria (America/Bogota, -05:00).
 - Errores en Problem Details (RFC 9457), `application/problem+json`. La

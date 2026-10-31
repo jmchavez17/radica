@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse
 from pydantic.alias_generators import to_camel
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from radica.aplicacion.casos_de_uso.errores import DatosInvalidos, PqrsNoEncontrada
+from radica.aplicacion.casos_de_uso.errores import DatosInvalidos, OperacionNoPermitida, PqrsNoEncontrada
 from radica.dominio.plazos import TerminoNoConfigurado
 
 registro = logging.getLogger("radica.api")
@@ -123,6 +123,10 @@ async def _no_encontrada(request: Request, error: PqrsNoEncontrada) -> JSONRespo
     )
 
 
+async def _conflicto(request: Request, error: OperacionNoPermitida) -> JSONResponse:
+    return problema(request, 409, "conflicto", "Operación no permitida", error.detalle)
+
+
 async def _http(request: Request, error: StarletteHTTPException) -> JSONResponse:
     titulo = TITULOS.get(error.status_code, "Error en la solicitud")
     detalle = "La ruta no existe." if error.status_code == 404 else titulo + "."
@@ -149,6 +153,7 @@ def registrar_manejadores(app: FastAPI) -> None:
     app.add_exception_handler(RequestValidationError, _de_esquema)
     app.add_exception_handler(DatosInvalidos, _de_negocio)
     app.add_exception_handler(PqrsNoEncontrada, _no_encontrada)
+    app.add_exception_handler(OperacionNoPermitida, _conflicto)
     app.add_exception_handler(StarletteHTTPException, _http)
     app.add_exception_handler(TerminoNoConfigurado, _termino_no_configurado)
     app.add_exception_handler(Exception, _interno)

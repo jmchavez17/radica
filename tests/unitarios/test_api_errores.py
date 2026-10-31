@@ -24,6 +24,7 @@ from radica.aplicacion.casos_de_uso.consultas import (
     ListarTerminos,
 )
 from radica.aplicacion.casos_de_uso.registrar_pqrs import RegistrarPqrs
+from radica.aplicacion.casos_de_uso.solicitar_clasificacion import SolicitarClasificacion
 from radica.aplicacion.puertos.clasificador import ResultadoClasificacion
 from radica.dominio.plazos import ZONA_COLOMBIA, CalculadoraDePlazos, Termino
 from radica.dominio.semaforo import ReglaSemaforo
@@ -62,6 +63,7 @@ def _cliente(
             bandeja=ListarBandeja(pqrs, semaforo, lambda: AHORA),
             historial=ConsultarHistorial(pqrs, auditoria),
             terminos=ListarTerminos(configuracion, lambda: AHORA),
+            solicitar_clasificacion=SolicitarClasificacion(pqrs, auditoria, 1),
         )
 
     def comprobar() -> None:
@@ -210,3 +212,13 @@ def test_el_openapi_publica_400_y_no_422(cliente: TestClient) -> None:
     assert registro["400"]["content"][PROBLEMA]["example"]["status"] == 400
     assert "HTTPValidationError" not in esquema["components"]["schemas"]
     assert {"PqrsNueva", "PqrsCreada", "PqrsDetalle", "Problema"} <= set(esquema["components"]["schemas"])
+
+
+def test_el_openapi_publica_el_reintento_con_202_404_y_409(cliente: TestClient) -> None:
+    esquema = cliente.get("/openapi.json").json()
+
+    reintento = esquema["paths"]["/api/v1/pqrs/{id}/clasificaciones"]["post"]
+    assert reintento["operationId"] == "solicitarClasificacionIa"
+    assert set(reintento["responses"]) == {"202", "400", "404", "409"}
+    assert PROBLEMA in reintento["responses"]["409"]["content"]
+    assert "ClasificacionSolicitada" in esquema["components"]["schemas"]

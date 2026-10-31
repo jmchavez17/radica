@@ -43,6 +43,7 @@ from radica.aplicacion.casos_de_uso.consultas import (
 )
 from radica.aplicacion.casos_de_uso.clasificar_pqrs import ClasificarPqrs
 from radica.aplicacion.casos_de_uso.registrar_pqrs import RegistrarPqrs
+from radica.aplicacion.casos_de_uso.solicitar_clasificacion import SolicitarClasificacion
 from radica.aplicacion.puertos.clasificador import ClasificadorPqrs
 from radica.config import PROVEEDOR_CLAUDE, Configuracion, cargar
 from radica.dominio.plazos import ZONA_COLOMBIA, CalculadoraDePlazos
@@ -111,6 +112,7 @@ def componer(
                 bandeja=ListarBandeja(pqrs, semaforo, reloj),
                 historial=ConsultarHistorial(pqrs, auditoria),
                 terminos=ListarTerminos(terminos, reloj),
+                solicitar_clasificacion=SolicitarClasificacion(pqrs, auditoria, id_usuario_actor),
             )
 
     return crear_app(casos, lambda: comprobar_conexion(motor))

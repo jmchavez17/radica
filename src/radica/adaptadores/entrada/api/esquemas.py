@@ -304,6 +304,15 @@ class Historial(_Esquema):
     eventos: list[EventoHistorial]
 
 
+class ClasificacionSolicitada(_Esquema):
+    """Respuesta 202 del reintento manual: el trabajador la toma en segundo plano."""
+
+    model_config = ConfigDict(json_schema_extra={"examples": [{"id": 1287, "estadoIa": "PENDIENTE"}]})
+
+    id: int
+    estado_ia: EstadoIa
+
+
 class TerminoLegal(_Esquema):
     id: int
     regimen: Regimen

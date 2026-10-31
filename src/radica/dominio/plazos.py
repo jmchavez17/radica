@@ -69,10 +69,13 @@ class Termino:
 
 
 def nivel_efectivo(tipo: TipoPqrs, nivel: NivelRiesgo) -> NivelRiesgo:
-    """Un RECLAMO nunca queda con NO_APLICA (mínimo SIMPLE); los demás tipos no llevan nivel."""
-    if tipo is not TipoPqrs.RECLAMO:
-        return NivelRiesgo.NO_APLICA
-    return NivelRiesgo.SIMPLE if nivel is NivelRiesgo.NO_APLICA else nivel
+    """Un RECLAMO nunca queda con NO_APLICA: el mínimo es SIMPLE.
+
+    Los demás tipos conservan el nivel que traen; su término no depende de él.
+    """
+    if tipo is TipoPqrs.RECLAMO and nivel is NivelRiesgo.NO_APLICA:
+        return NivelRiesgo.SIMPLE
+    return nivel
 
 
 def dia_en_colombia(momento: datetime) -> date:

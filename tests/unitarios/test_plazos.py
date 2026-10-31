@@ -97,7 +97,7 @@ def test_un_reclamo_sin_nivel_queda_simple(terminos: tuple[Termino, ...]) -> Non
 def test_los_demas_tipos_ignoran_el_nivel_de_riesgo(
     terminos: tuple[Termino, ...], nivel: NivelRiesgo
 ) -> None:
-    assert nivel_efectivo(P.QUEJA, nivel) is N.NO_APLICA
+    assert nivel_efectivo(P.QUEJA, nivel) is nivel
     termino = seleccionar_termino(terminos, P.QUEJA, nivel, True, _bogota("2026-10-30 16:00"))
     assert termino.id == 4
 

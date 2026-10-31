@@ -1,0 +1,27 @@
+# Por ahora solo la base de datos; la API y el trabajador se agregan después.
+# Las credenciales se leen del archivo .env (ver .env.example).
+# Para validar este archivo usar `docker compose config --quiet`:
+# sin --quiet, Compose imprime los valores leídos del .env.
+name: radica
+
+services:
+  db:
+    image: postgres:16.15-trixie
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?Falta POSTGRES_DB en .env}
+      POSTGRES_USER: ${POSTGRES_USER:?Falta POSTGRES_USER en .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD en .env}
+    ports:
+      # 5433 en el anfitrión porque el 5432 lo ocupa un PostgreSQL local.
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - datos_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  datos_postgres:

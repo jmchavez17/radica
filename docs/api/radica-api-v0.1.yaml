@@ -1,0 +1,580 @@
+openapi: 3.1.0
+info:
+  title: Radica API
+  version: 0.1.0
+  summary: Especificación inicial de la API REST de Radica (Entrega 2, Módulo 2).
+  description: |
+    API del asistente de gestión de PQRS Radica. Diseño inicial: aún no está implementada.
+    Convenciones:
+    - JSON UTF-8 con nombres en camelCase; fechas ISO 8601 con zona horaria (America/Bogota, -05:00).
+    - Autenticación con token JWT (Authorization: Bearer). Roles: FUNCIONARIO, COORDINADOR, ADMIN.
+    - Errores en formato Problem Details (RFC 9457), tipo de contenido application/problem+json.
+    - Los ejemplos usan datos sintéticos. El proveedor de IA nunca se expone en esta API.
+  contact:
+    name: Jose Miguel Chávez Figueroa e Isabella Castaño Muñoz
+servers:
+  - url: http://localhost:8000/api/v1
+    description: Entorno local de desarrollo
+security:
+  - bearerAuth: []
+tags:
+  - name: PQRS
+  - name: Clasificación
+  - name: Respuesta
+  - name: Tablero
+  - name: Configuración
+paths:
+  /pqrs:
+    post:
+      tags: [PQRS]
+      operationId: registrarPqrs
+      summary: Registrar una PQRS (HU-01)
+      description: |
+        Valida y guarda la PQRS, asigna el radicado, aplica la clasificación provisional por reglas
+        (palabras clave y de alarma), calcula el vencimiento provisional y deja la clasificación con IA
+        en estado PENDIENTE. No espera al proveedor de IA.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PqrsNueva' }
+            example:
+              canal: DIME
+              sede: Sede clínica
+              fechaRadicacion: '2026-10-30T16:00:00-05:00'
+              texto: >-
+                Desde hace tres semanas me ordenaron una resonancia y no me han dado la autorización.
+                Llamé dos veces y nadie responde. Mi teléfono es 3000000000.
+              pacienteMenorDeEdad: false
+              peticionario:
+                tipoDocumento: CC
+                numeroDocumento: '1000000001'
+                nombre: Usuario Sintético Uno
+                telefono: '3000000000'
+                correo: usuario1@ejemplo.com
+      responses:
+        '201':
+          description: PQRS registrada.
+          headers:
+            Location:
+              description: Ruta del recurso creado.
+              schema: { type: string, example: /api/v1/pqrs/1287 }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PqrsCreada' }
+              example:
+                id: 1287
+                radicado: RAD-2026-001287
+                estado: REGISTRADA
+                estadoIa: PENDIENTE
+                clasificacionProvisional:
+                  origen: REGLAS
+                  tipo: RECLAMO
+                  nivelRiesgo: SIMPLE
+                  area: { id: 4, nombre: Autorizaciones }
+                vencimiento:
+                  fecha: '2026-11-02T16:00:00-05:00'
+                  regla: 'Reclamo en salud, riesgo simple: 72 horas corridas'
+                  semaforo: VERDE
+                posiblesDuplicados: []
+        '400': { $ref: '#/components/responses/SolicitudInvalida' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/Prohibido' }
+    get:
+      tags: [PQRS]
+      operationId: listarPqrs
+      summary: Bandeja de PQRS con semáforo (HU-08)
+      parameters:
+        - { name: semaforo, in: query, schema: { $ref: '#/components/schemas/Semaforo' } }
+        - { name: estado, in: query, schema: { $ref: '#/components/schemas/EstadoPqrs' } }
+        - { name: idArea, in: query, schema: { type: integer } }
+        - { name: tipo, in: query, schema: { $ref: '#/components/schemas/TipoPqrs' } }
+        - { name: pagina, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: tamano, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        '200':
+          description: Página de PQRS ordenadas por vencimiento (las vencidas primero).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pagina: { type: integer }
+                  total: { type: integer }
+                  elementos:
+                    type: array
+                    items: { $ref: '#/components/schemas/PqrsResumen' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+  /pqrs/{id}:
+    get:
+      tags: [PQRS]
+      operationId: consultarPqrs
+      summary: Consultar una PQRS con su clasificación vigente y su vencimiento (HU-04, HU-07)
+      parameters:
+        - $ref: '#/components/parameters/IdPqrs'
+      responses:
+        '200':
+          description: Detalle de la PQRS. Solo se muestra el texto enmascarado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PqrsDetalle' }
+              example:
+                id: 1287
+                radicado: RAD-2026-001287
+                canal: DIME
+                sede: Sede clínica
+                fechaRadicacion: '2026-10-30T16:00:00-05:00'
+                textoEnmascarado: >-
+                  Desde hace tres semanas me ordenaron una resonancia y no me han dado la autorización.
+                  Llamé dos veces y nadie responde. Mi teléfono es [TELEFONO_1].
+                estado: ASIGNADA
+                estadoIa: COMPLETADA
+                clasificacion:
+                  origen: IA
+                  tipo: RECLAMO
+                  atributo: { id: 2, nombre: Oportunidad }
+                  area: { id: 4, nombre: Autorizaciones }
+                  nivelRiesgo: PRIORIZADO
+                  confianza: 0.86
+                  resumen: Paciente espera hace tres semanas la autorización de una resonancia.
+                  requiereRevision: false
+                  modelo: claude-haiku-5-5
+                  versionInstrucciones: clasif-v1.0
+                vencimiento:
+                  fecha: '2026-11-01T16:00:00-05:00'
+                  regla: 'Reclamo en salud, riesgo priorizado: 48 horas corridas'
+                  semaforo: AMARILLO
+                  horasRestantes: 20.5
+                responsable: { id: 7, nombre: Funcionario Sintético }
+                posiblesDuplicados: []
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+  /pqrs/{id}/clasificacion:
+    patch:
+      tags: [Clasificación]
+      operationId: corregirClasificacion
+      summary: Corregir tipo, atributo, área o nivel de riesgo (HU-06)
+      description: |
+        Una persona corrige la clasificación. El vencimiento se recalcula con la tabla de términos y el
+        cambio queda en la auditoría con el valor anterior. Bajar el nivel de riesgo exige un motivo.
+      parameters:
+        - $ref: '#/components/parameters/IdPqrs'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CorreccionClasificacion' }
+            example:
+              tipo: SOLICITUD_INFORMACION
+              nivelRiesgo: NO_APLICA
+              idArea: 3
+              motivo: 'El peticionario solo pide copia de documentos; aplica el término de información.'
+      responses:
+        '200':
+          description: Clasificación corregida y vencimiento recalculado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ResultadoCorreccion' }
+              example:
+                id: 1290
+                clasificacion:
+                  origen: PERSONA
+                  tipo: SOLICITUD_INFORMACION
+                  nivelRiesgo: NO_APLICA
+                  area: { id: 3, nombre: Archivo clínico }
+                vencimiento:
+                  fecha: '2026-11-17T23:59:59-05:00'
+                  regla: 'Solicitud de información: 10 días hábiles'
+                  semaforo: VERDE
+                cambios:
+                  - { campo: tipo, valorAnterior: PETICION, valorNuevo: SOLICITUD_INFORMACION }
+                  - { campo: fechaVencimiento, valorAnterior: '2026-11-24T23:59:59-05:00', valorNuevo: '2026-11-17T23:59:59-05:00' }
+        '400': { $ref: '#/components/responses/SolicitudInvalida' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/Prohibido' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/Conflicto' }
+        '422':
+          description: Se intenta bajar el nivel de riesgo sin motivo.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problema' }
+              example:
+                type: https://radica.local/problemas/motivo-requerido
+                title: Motivo requerido
+                status: 422
+                detail: Bajar el nivel de riesgo de PRIORIZADO a SIMPLE exige un motivo.
+                instance: /api/v1/pqrs/1287/clasificacion
+  /pqrs/{id}/clasificaciones:
+    post:
+      tags: [Clasificación]
+      operationId: solicitarClasificacionIa
+      summary: Solicitar de nuevo la clasificación con IA (reintento manual)
+      parameters:
+        - $ref: '#/components/parameters/IdPqrs'
+      responses:
+        '202':
+          description: Solicitud encolada; la PQRS queda en estado de IA PENDIENTE.
+          content:
+            application/json:
+              example: { id: 1287, estadoIa: PENDIENTE }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/Conflicto' }
+  /pqrs/{id}/prorroga:
+    post:
+      tags: [PQRS]
+      operationId: registrarProrroga
+      summary: Registrar la prórroga antes del vencimiento (HU-07)
+      parameters:
+        - $ref: '#/components/parameters/IdPqrs'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            example: { motivo: 'Se requiere concepto del área asistencial.', nuevoPlazoDias: 15 }
+      responses:
+        '200': { description: 'Prórroga registrada y vencimiento recalculado (nunca más del doble del plazo inicial).' }
+        '409': { $ref: '#/components/responses/Conflicto' }
+        '422': { description: 'El plazo pedido supera el doble del inicial o la PQRS ya venció.' }
+  /pqrs/{id}/historial:
+    get:
+      tags: [Tablero]
+      operationId: consultarHistorial
+      summary: Historial completo de una PQRS (HU-13)
+      parameters:
+        - $ref: '#/components/parameters/IdPqrs'
+      responses:
+        '200': { description: 'Eventos de auditoría con usuario u origen, fecha, valor anterior y nuevo.' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+  /pqrs/{id}/borradores:
+    post:
+      tags: [Respuesta]
+      operationId: generarBorrador
+      summary: Generar un borrador de respuesta (HU-10)
+      description: |
+        Usa el texto enmascarado, la clasificación confirmada y la información aportada por el área.
+        Si falta un dato, inserta [COMPLETAR: dato]. Si la IA no está disponible, usa la plantilla del tipo.
+      parameters:
+        - $ref: '#/components/parameters/IdPqrs'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SolicitudBorrador' }
+            example:
+              informacionArea: La autorización quedó aprobada el 31 de octubre de 2026.
+      responses:
+        '201':
+          description: Borrador generado; no cuenta como respuesta hasta su aprobación.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Borrador' }
+              example:
+                id: 532
+                origen: IA
+                estado: GENERADO
+                contenido: >-
+                  Respetado(a) Usuario Sintético Uno: en atención a su reclamo RAD-2026-001287, le
+                  informamos que la autorización de la resonancia quedó aprobada el 31 de octubre de 2026
+                  con el número [COMPLETAR: número de autorización]. ...
+                camposPorCompletar: [número de autorización]
+                aviso: null
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/Conflicto' }
+  /borradores/{id}/aprobacion:
+    post:
+      tags: [Respuesta]
+      operationId: aprobarBorrador
+      summary: Aprobar el borrador como respuesta (HU-11)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Aprobacion' }
+            example:
+              contenidoFinal: Respetado(a) Usuario Sintético Uno ... número de autorización 2026-55555 ...
+      responses:
+        '200':
+          description: Borrador aprobado; la PQRS pasa a RESPONDIDA.
+          content:
+            application/json:
+              example:
+                idBorrador: 532
+                estado: APROBADO
+                editado: true
+                aprobadoPor: { id: 7, nombre: Funcionario Sintético }
+                fechaAprobacion: '2026-10-31T10:12:00-05:00'
+                estadoPqrs: RESPONDIDA
+        '400': { $ref: '#/components/responses/SolicitudInvalida' }
+        '403': { $ref: '#/components/responses/Prohibido' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/Conflicto' }
+  /importaciones:
+    post:
+      tags: [PQRS]
+      operationId: importarCsv
+      summary: Importar PQRS desde CSV UTF-8 (HU-02)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [archivo]
+              properties:
+                archivo: { type: string, format: binary }
+      responses:
+        '201':
+          description: Resumen de la importación con las filas rechazadas y su motivo.
+          content:
+            application/json:
+              example:
+                filasTotales: 52
+                creadas: 50
+                rechazadas:
+                  - { fila: 14, motivo: 'fechaRadicacion no tiene formato ISO 8601' }
+                  - { fila: 33, motivo: 'texto vacío' }
+        '400': { $ref: '#/components/responses/SolicitudInvalida' }
+  /tablero:
+    get:
+      tags: [Tablero]
+      operationId: consultarTablero
+      summary: Vencimientos, carga por persona, volumen por tipo y área (HU-12)
+      parameters:
+        - { name: desde, in: query, schema: { type: string, format: date } }
+        - { name: hasta, in: query, schema: { type: string, format: date } }
+      responses:
+        '200': { description: 'Indicadores del periodo.' }
+        '403': { $ref: '#/components/responses/Prohibido' }
+  /reportes/semaforo:
+    get:
+      tags: [Tablero]
+      operationId: exportarReporteSemaforo
+      summary: Reporte semaforizado en CSV para auditorías
+      responses:
+        '200':
+          description: Archivo CSV UTF-8 con radicado, tipo, área, vencimiento y color del semáforo.
+          content:
+            text/csv:
+              schema: { type: string }
+  /configuracion/terminos:
+    get:
+      tags: [Configuración]
+      operationId: listarTerminos
+      summary: Tabla de términos vigente
+      responses:
+        '200': { description: 'Términos con régimen, tipo, nivel de riesgo, valor, unidad y fuente normativa.' }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    IdPqrs:
+      name: id
+      in: path
+      required: true
+      schema: { type: integer, format: int64 }
+  responses:
+    SolicitudInvalida:
+      description: Datos faltantes o con formato inválido.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problema' }
+          example:
+            type: https://radica.local/problemas/validacion
+            title: Datos inválidos
+            status: 400
+            detail: La solicitud tiene 2 errores de validación.
+            instance: /api/v1/pqrs
+            errores:
+              - { campo: texto, mensaje: 'El texto es obligatorio.' }
+              - { campo: fechaRadicacion, mensaje: 'Debe ser una fecha ISO 8601 con zona horaria.' }
+    NoAutenticado:
+      description: Falta el token o no es válido.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problema' }
+    Prohibido:
+      description: El rol del usuario no permite la operación.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problema' }
+    NoEncontrado:
+      description: La PQRS o el borrador no existe.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problema' }
+    Conflicto:
+      description: El estado actual no permite la operación (por ejemplo, PQRS cerrada o borrador ya aprobado).
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problema' }
+  schemas:
+    TipoPqrs:
+      type: string
+      enum: [PETICION, QUEJA, RECLAMO, SUGERENCIA, SOLICITUD_INFORMACION, CONSULTA]
+    NivelRiesgo:
+      type: string
+      enum: [NO_APLICA, SIMPLE, PRIORIZADO, VITAL]
+    Canal:
+      type: string
+      enum: [DIME, CARTA, CORREO, WEB, VERBAL, BUZON, APLICATIVO_EPS]
+    Semaforo:
+      type: string
+      enum: [VERDE, AMARILLO, ROJO]
+    EstadoPqrs:
+      type: string
+      enum: [REGISTRADA, REQUIERE_REVISION, CLASIFICADA, ASIGNADA, EN_RESPUESTA, RESPONDIDA, CERRADA]
+    EstadoIa:
+      type: string
+      enum: [PENDIENTE, COMPLETADA, FALLIDA, OMITIDA]
+    Referencia:
+      type: object
+      properties:
+        id: { type: integer }
+        nombre: { type: string }
+    Peticionario:
+      type: object
+      required: [tipoDocumento, numeroDocumento, nombre]
+      properties:
+        tipoDocumento: { type: string, enum: [CC, TI, CE, PA, RC, PPT] }
+        numeroDocumento: { type: string, maxLength: 20 }
+        nombre: { type: string, maxLength: 150 }
+        telefono: { type: string, maxLength: 20 }
+        correo: { type: string, format: email }
+    PqrsNueva:
+      type: object
+      required: [canal, fechaRadicacion, texto, peticionario]
+      properties:
+        canal: { $ref: '#/components/schemas/Canal' }
+        sede: { type: string, maxLength: 60 }
+        fechaRadicacion: { type: string, format: date-time }
+        texto: { type: string, minLength: 10, maxLength: 10000 }
+        pacienteMenorDeEdad: { type: boolean, default: false }
+        peticionario: { $ref: '#/components/schemas/Peticionario' }
+    Vencimiento:
+      type: object
+      properties:
+        fecha: { type: string, format: date-time }
+        regla: { type: string }
+        semaforo: { $ref: '#/components/schemas/Semaforo' }
+        horasRestantes: { type: number }
+    ClasificacionResumen:
+      type: object
+      properties:
+        origen: { type: string, enum: [REGLAS, IA, PERSONA] }
+        tipo: { $ref: '#/components/schemas/TipoPqrs' }
+        atributo: { $ref: '#/components/schemas/Referencia' }
+        area: { $ref: '#/components/schemas/Referencia' }
+        nivelRiesgo: { $ref: '#/components/schemas/NivelRiesgo' }
+        confianza: { type: number, minimum: 0, maximum: 1 }
+        resumen: { type: string, maxLength: 300 }
+        requiereRevision: { type: boolean }
+        modelo: { type: string }
+        versionInstrucciones: { type: string }
+    PqrsCreada:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        radicado: { type: string }
+        estado: { $ref: '#/components/schemas/EstadoPqrs' }
+        estadoIa: { $ref: '#/components/schemas/EstadoIa' }
+        clasificacionProvisional: { $ref: '#/components/schemas/ClasificacionResumen' }
+        vencimiento: { $ref: '#/components/schemas/Vencimiento' }
+        posiblesDuplicados:
+          type: array
+          items: { type: string, description: Radicado de la PQRS posiblemente duplicada }
+    PqrsResumen:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        radicado: { type: string }
+        tipo: { $ref: '#/components/schemas/TipoPqrs' }
+        nivelRiesgo: { $ref: '#/components/schemas/NivelRiesgo' }
+        area: { $ref: '#/components/schemas/Referencia' }
+        estado: { $ref: '#/components/schemas/EstadoPqrs' }
+        vencimiento: { $ref: '#/components/schemas/Vencimiento' }
+    PqrsDetalle:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        radicado: { type: string }
+        canal: { $ref: '#/components/schemas/Canal' }
+        sede: { type: string }
+        fechaRadicacion: { type: string, format: date-time }
+        textoEnmascarado: { type: string }
+        estado: { $ref: '#/components/schemas/EstadoPqrs' }
+        estadoIa: { $ref: '#/components/schemas/EstadoIa' }
+        clasificacion: { $ref: '#/components/schemas/ClasificacionResumen' }
+        vencimiento: { $ref: '#/components/schemas/Vencimiento' }
+        responsable: { $ref: '#/components/schemas/Referencia' }
+        posiblesDuplicados:
+          type: array
+          items: { type: string }
+    CorreccionClasificacion:
+      type: object
+      required: [motivo]
+      properties:
+        tipo: { $ref: '#/components/schemas/TipoPqrs' }
+        idAtributo: { type: [integer, 'null'] }
+        idArea: { type: integer }
+        nivelRiesgo: { $ref: '#/components/schemas/NivelRiesgo' }
+        motivo: { type: string, minLength: 5, maxLength: 300 }
+    ResultadoCorreccion:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        clasificacion: { $ref: '#/components/schemas/ClasificacionResumen' }
+        vencimiento: { $ref: '#/components/schemas/Vencimiento' }
+        cambios:
+          type: array
+          items:
+            type: object
+            properties:
+              campo: { type: string }
+              valorAnterior: { type: string }
+              valorNuevo: { type: string }
+    SolicitudBorrador:
+      type: object
+      required: [informacionArea]
+      properties:
+        informacionArea: { type: string, maxLength: 5000 }
+    Borrador:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        origen: { type: string, enum: [IA, PLANTILLA] }
+        estado: { type: string, enum: [GENERADO, APROBADO, DESCARTADO] }
+        contenido: { type: string }
+        camposPorCompletar:
+          type: array
+          items: { type: string }
+        aviso: { type: [string, 'null'] }
+    Aprobacion:
+      type: object
+      required: [contenidoFinal]
+      properties:
+        contenidoFinal: { type: string }
+    Problema:
+      type: object
+      description: Problem Details for HTTP APIs (RFC 9457).
+      properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+        errores:
+          type: array
+          items:
+            type: object
+            properties:
+              campo: { type: string }
+              mensaje: { type: string }

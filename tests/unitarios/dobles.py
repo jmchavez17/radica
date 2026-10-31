@@ -1,7 +1,11 @@
 """Dobles en memoria de los puertos, para probar los casos de uso sin base de datos."""
 
+import json
 from dataclasses import replace
 from datetime import date, datetime
+from typing import Any
+
+import anthropic
 
 from radica.aplicacion.puertos.clasificador import (
     AreaCatalogo,
@@ -212,3 +216,60 @@ class ClasificadorQueFalla:
     def clasificar(self, solicitud: SolicitudClasificacion) -> ResultadoClasificacion:
         self.solicitudes.append(solicitud)
         raise self.error
+
+
+# --- Cliente falso del SDK de Anthropic: sin red y sin la clave real ---
+
+SALIDA_CLAUDE = {
+    "tipo": "RECLAMO",
+    "idAtributo": 2,
+    "idArea": 4,
+    "nivelRiesgo": "PRIORIZADO",
+    "confianza": 0.86,
+    "senalesRiesgo": ["tres semanas sin autorización de un examen ordenado"],
+    "resumen": "Paciente espera hace tres semanas la autorización de una resonancia.",
+    "datosClave": [
+        {"nombre": "servicio", "valor": "resonancia"},
+        {"nombre": "tiempoEspera", "valor": "tres semanas"},
+    ],
+}
+
+
+def mensaje_claude(
+    salida: object = SALIDA_CLAUDE,
+    stop_reason: str = "end_turn",
+    tokens: tuple[int, int] = (3000, 300),
+) -> anthropic.types.Message:
+    """Una respuesta real del tipo Message del SDK, para que un cambio del SDK se note."""
+    texto = salida if isinstance(salida, str) else json.dumps(salida, ensure_ascii=False)
+    return anthropic.types.Message.model_validate(
+        {
+            "id": "msg_prueba",
+            "type": "message",
+            "role": "assistant",
+            "model": "claude-haiku-5-5",
+            "content": [{"type": "text", "text": texto}],
+            "stop_reason": stop_reason,
+            "stop_sequence": None,
+            "usage": {"input_tokens": tokens[0], "output_tokens": tokens[1]},
+        }
+    )
+
+
+class ClienteClaudeFalso:
+    """Responde en orden lo que se le da: un Message o una excepción para lanzar."""
+
+    def __init__(self, *respuestas: object) -> None:
+        self.respuestas = list(respuestas)
+        self.llamadas: list[dict[str, Any]] = []
+
+    @property
+    def messages(self) -> "ClienteClaudeFalso":
+        return self
+
+    def create(self, **parametros: Any) -> anthropic.types.Message:
+        self.llamadas.append(parametros)
+        respuesta = self.respuestas.pop(0)
+        if isinstance(respuesta, BaseException):
+            raise respuesta
+        return respuesta  # type: ignore[return-value]

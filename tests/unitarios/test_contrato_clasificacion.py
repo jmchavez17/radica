@@ -3,8 +3,14 @@
 from dataclasses import FrozenInstanceError
 from decimal import Decimal
 
+import anthropic
+import httpx2
 import pytest
+from dobles import CATALOGO, ClienteClaudeFalso, mensaje_claude
 
+from radica.adaptadores.salida.ia.claude import AdaptadorClaude
+from radica.adaptadores.salida.ia.respaldo import ClasificadorConRespaldo
+from radica.adaptadores.salida.palabras_clave.clasificador import ClasificadorPalabrasClave
 from radica.aplicacion.puertos.clasificador import (
     AreaCatalogo,
     Catalogo,
@@ -119,3 +125,56 @@ def test_una_clase_con_clasificar_cumple_el_puerto() -> None:
         version_instrucciones="clasif-v1.0",
     )
     assert clasificador.clasificar(solicitud).id_area == 4
+
+
+# --- Batería de contrato (Entrega 2, 10.1): la misma para cada clasificador ---
+
+TIEMPO_AGOTADO = anthropic.APITimeoutError(
+    request=httpx2.Request("POST", "https://api.anthropic.com/v1/messages")
+)
+
+
+def _claude(*respuestas: object) -> AdaptadorClaude:
+    return AdaptadorClaude(
+        ClienteClaudeFalso(*respuestas), "claude-haiku-5-5", Decimal("0.10"), Decimal("0.50"),
+        esperar=lambda _: None,
+    )
+
+
+IMPLEMENTACIONES = {
+    "palabras-clave": ClasificadorPalabrasClave,
+    "claude": lambda: _claude(mensaje_claude()),
+    "respaldo": lambda: ClasificadorConRespaldo(
+        [_claude(TIEMPO_AGOTADO, TIEMPO_AGOTADO, TIEMPO_AGOTADO), ClasificadorPalabrasClave()]
+    ),
+}
+
+
+@pytest.fixture(params=sorted(IMPLEMENTACIONES))
+def implementacion(request: pytest.FixtureRequest) -> ClasificadorPqrs:
+    return IMPLEMENTACIONES[request.param]()
+
+
+def test_cada_clasificador_devuelve_valores_del_dominio_y_del_catalogo(
+    implementacion: ClasificadorPqrs,
+) -> None:
+    solicitud = SolicitudClasificacion(
+        1, "No me han dado la autorización de la resonancia. [TELEFONO_1]", CATALOGO, "clasif-v1.0"
+    )
+
+    resultado = implementacion.clasificar(solicitud)
+
+    assert isinstance(resultado, ResultadoClasificacion)
+    assert isinstance(resultado.tipo, TipoPqrs) and resultado.tipo in CATALOGO.tipos
+    assert isinstance(resultado.nivel_riesgo, NivelRiesgo)
+    assert 0 <= resultado.confianza <= 1
+    assert resultado.id_atributo is None or resultado.id_atributo in {a.id for a in CATALOGO.atributos}
+    assert resultado.id_area is None or resultado.id_area in {a.id for a in CATALOGO.areas}
+    assert all(isinstance(valor, str) for valor in resultado.datos_clave.values())
+    assert resultado.uso is None or resultado.uso.resultado is ResultadoLlamadaIA.OK
+
+
+def test_un_clasificador_con_proveedor_solo_lanza_errores_del_puerto() -> None:
+    solicitud = SolicitudClasificacion(1, "Texto de prueba suficiente.", CATALOGO, "clasif-v1.0")
+    with pytest.raises((ProveedorNoDisponible, SalidaInvalida)):
+        _claude(*[anthropic.AnthropicError("error del SDK")] * 3).clasificar(solicitud)

@@ -6,12 +6,11 @@ tipo Message, para que un cambio del SDK se note aquí.
 
 import json
 from decimal import Decimal
-from typing import Any
 
 import anthropic
 import httpx2
 import pytest
-from dobles import CATALOGO
+from dobles import CATALOGO, SALIDA_CLAUDE, ClienteClaudeFalso, mensaje_claude
 
 from radica.adaptadores.salida.ia.claude import (
     ESQUEMA_SALIDA,
@@ -32,64 +31,15 @@ TEXTO = (
     " Mi teléfono es [TELEFONO_1] y mi cédula [CEDULA_1]."
 )
 SOLICITUD = SolicitudClasificacion(1287, TEXTO, CATALOGO, "clasif-v1.0")
-SALIDA_BUENA = {
-    "tipo": "RECLAMO",
-    "idAtributo": 2,
-    "idArea": 4,
-    "nivelRiesgo": "PRIORIZADO",
-    "confianza": 0.86,
-    "senalesRiesgo": ["tres semanas sin autorización de un examen ordenado"],
-    "resumen": "Paciente espera hace tres semanas la autorización de una resonancia.",
-    "datosClave": [
-        {"nombre": "servicio", "valor": "resonancia"},
-        {"nombre": "tiempoEspera", "valor": "tres semanas"},
-    ],
-}
+SALIDA_BUENA = SALIDA_CLAUDE
 SOLICITUD_HTTP = httpx2.Request("POST", "https://api.anthropic.com/v1/messages")
-
-
-def _mensaje(
-    salida: object = SALIDA_BUENA,
-    stop_reason: str = "end_turn",
-    tokens: tuple[int, int] = (3000, 300),
-) -> anthropic.types.Message:
-    texto = salida if isinstance(salida, str) else json.dumps(salida, ensure_ascii=False)
-    return anthropic.types.Message.model_validate(
-        {
-            "id": "msg_prueba",
-            "type": "message",
-            "role": "assistant",
-            "model": "claude-haiku-5-5",
-            "content": [{"type": "text", "text": texto}],
-            "stop_reason": stop_reason,
-            "stop_sequence": None,
-            "usage": {"input_tokens": tokens[0], "output_tokens": tokens[1]},
-        }
-    )
+ClienteFalso = ClienteClaudeFalso
+_mensaje = mensaje_claude
 
 
 def _estado(codigo: int, clase: type[anthropic.APIStatusError] = anthropic.APIStatusError) -> Exception:
     respuesta = httpx2.Response(codigo, request=SOLICITUD_HTTP)
     return clase(f"error {codigo}", response=respuesta, body=None)
-
-
-class ClienteFalso:
-    """Responde en orden lo que se le da: un Message o una excepción para lanzar."""
-
-    def __init__(self, *respuestas: object) -> None:
-        self.respuestas = list(respuestas)
-        self.llamadas: list[dict[str, Any]] = []
-
-    @property
-    def messages(self) -> "ClienteFalso":
-        return self
-
-    def create(self, **parametros: Any) -> anthropic.types.Message:
-        self.llamadas.append(parametros)
-        respuesta = self.respuestas.pop(0)
-        if isinstance(respuesta, BaseException):
-            raise respuesta
-        return respuesta  # type: ignore[return-value]
 
 
 class Reloj:

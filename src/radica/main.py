@@ -18,6 +18,8 @@ from radica.adaptadores.entrada.api.app import crear_app
 from radica.adaptadores.entrada.api.casos import CasosDeUso
 from radica.adaptadores.salida.cifrado.aes_gcm import CifradorAesGcm
 from radica.adaptadores.salida.enmascarador.reglas import EnmascaradorReglas
+from radica.adaptadores.salida.ia.claude import AdaptadorClaude
+from radica.adaptadores.salida.ia.respaldo import ClasificadorConRespaldo
 from radica.adaptadores.salida.palabras_clave.clasificador import ClasificadorPalabrasClave
 from radica.adaptadores.salida.postgres.repositorios import (
     AuditoriaRepositoryPostgres,
@@ -34,7 +36,7 @@ from radica.aplicacion.casos_de_uso.consultas import (
 )
 from radica.aplicacion.casos_de_uso.registrar_pqrs import RegistrarPqrs
 from radica.aplicacion.puertos.clasificador import ClasificadorPqrs
-from radica.config import Configuracion, cargar
+from radica.config import PROVEEDOR_CLAUDE, Configuracion, cargar
 from radica.dominio.plazos import ZONA_COLOMBIA, CalculadoraDePlazos
 from radica.dominio.semaforo import ReglaSemaforo
 
@@ -44,6 +46,21 @@ ID_USUARIO_ACTOR = 1  # «Funcionario Sintético»: sin autenticación en esta e
 
 def ahora_en_colombia() -> datetime:
     return datetime.now(ZONA_COLOMBIA)
+
+
+def construir_clasificador_ia(configuracion: Configuracion) -> ClasificadorPqrs | None:
+    """IA_PROVIDER=claude: Claude y, si falla, palabras clave (10.4). ninguno: None, sin proveedor (4.9)."""
+    if configuracion.ia_proveedor != PROVEEDOR_CLAUDE:
+        return None
+    assert configuracion.ia_api_key is not None  # config.leer() la exige con claude
+    principal = AdaptadorClaude.con_clave(
+        api_key=configuracion.ia_api_key,
+        modelo=configuracion.ia_modelo,
+        timeout_s=configuracion.ia_timeout_s,
+        precio_entrada_usd_mtok=configuracion.precio_entrada_usd_mtok,
+        precio_salida_usd_mtok=configuracion.precio_salida_usd_mtok,
+    )
+    return ClasificadorConRespaldo([principal, ClasificadorPalabrasClave()])
 
 
 def componer(

@@ -5,6 +5,7 @@ Cada prueba trabaja dentro de una transacción que se deshace al final.
 
 from collections.abc import Iterator
 from datetime import date, datetime
+from decimal import Decimal
 
 import pytest
 from sqlalchemy import Connection, Engine, text
@@ -16,6 +17,7 @@ from radica.adaptadores.salida.postgres.repositorios import (
     PqrsRepositoryPostgres,
     comprobar_conexion,
 )
+from radica.aplicacion.puertos.clasificador import UsoIA
 from radica.aplicacion.puertos.pqrs import FiltroBandeja
 from radica.dominio.plazos import ZONA_COLOMBIA
 from radica.dominio.pqrs import (
@@ -34,6 +36,7 @@ from radica.dominio.valores import (
     NivelRiesgo,
     OrigenClasificacion,
     OrigenEvento,
+    ResultadoLlamadaIA,
     TipoPqrs,
 )
 
@@ -228,3 +231,153 @@ def test_festivos_y_catalogo(conexion: Connection) -> None:
     assert catalogo.tipos == tuple(TipoPqrs)
     assert [a.nombre for a in catalogo.areas][3] == "Autorizaciones"
     assert len(catalogo.atributos) == 7 and catalogo.atributos[1].nombre == "Oportunidad"
+
+
+# --- Sesión 4: lo que usan ClasificarPqrs, el trabajador y el reintento ---
+
+def _uso(resultado: ResultadoLlamadaIA = ResultadoLlamadaIA.OK, intento: int = 1) -> UsoIA:
+    return UsoIA("anthropic", "claude-haiku-5-5", 1200, 150, Decimal("0.000195"), 850, intento, resultado)
+
+
+def test_obtener_para_clasificar(conexion: Connection) -> None:
+    repositorio = PqrsRepositoryPostgres(conexion)
+    id_pqrs = _registrar(repositorio)
+
+    datos = repositorio.obtener_para_clasificar(id_pqrs)
+
+    assert datos is not None
+    assert (datos.tipo, datos.nivel_riesgo, datos.id_atributo, datos.id_area) == (
+        TipoPqrs.RECLAMO, NivelRiesgo.SIMPLE, 2, 4,
+    )
+    assert datos.fecha_radicacion == RADICACION
+    assert datos.fecha_vencimiento == datetime(2026, 11, 2, 16, tzinfo=ZONA_COLOMBIA)
+    assert (datos.estado, datos.estado_ia, datos.paciente_menor) == (
+        EstadoPqrs.REGISTRADA, EstadoIa.PENDIENTE, False,
+    )
+    assert datos.texto_enmascarado == "Mi teléfono es [TELEFONO_1]."
+    assert datos.peticionario == _peticionario()
+    assert repositorio.obtener_para_clasificar(999_999) is None
+
+
+def test_pendientes_de_ia_de_la_mas_antigua_a_la_mas_nueva(conexion: Connection) -> None:
+    repositorio = PqrsRepositoryPostgres(conexion)
+    primera, segunda, tercera = (_registrar(repositorio) for _ in range(3))
+    repositorio.actualizar_estado(segunda, EstadoPqrs.CLASIFICADA, EstadoIa.COMPLETADA)
+    # Las tres comparten fecha_creacion (misma transacción): desempata el id.
+
+    assert repositorio.pendientes_de_ia(5) == [primera, tercera]
+    assert repositorio.pendientes_de_ia() == [primera]
+
+
+def test_aplicar_una_clasificacion_nueva(conexion: Connection) -> None:
+    repositorio = PqrsRepositoryPostgres(conexion)
+    auditoria = AuditoriaRepositoryPostgres(conexion)
+    id_pqrs = _registrar(repositorio)
+    id_llamada = auditoria.registrar_llamada_ia(id_pqrs, _uso(), "clasif-v1.0")
+    nueva = Clasificacion(
+        OrigenClasificacion.IA, TipoPqrs.RECLAMO, 2, 4, NivelRiesgo.PRIORIZADO, 0.86,
+        resumen="Paciente espera la autorización de una resonancia.", id_llamada_ia=id_llamada,
+    )
+
+    with pytest.raises(IntegrityError, match="uq_clasificacion_vigente"):
+        with conexion.begin_nested():
+            repositorio.guardar_clasificacion(id_pqrs, nueva)
+    repositorio.retirar_clasificacion_vigente(id_pqrs)
+    repositorio.guardar_clasificacion(id_pqrs, nueva)
+    repositorio.actualizar_clasificacion(
+        id_pqrs, TipoPqrs.RECLAMO, 2, NivelRiesgo.PRIORIZADO, 7,
+        datetime(2026, 11, 1, 16, tzinfo=ZONA_COLOMBIA),
+    )
+    repositorio.actualizar_estado(id_pqrs, EstadoPqrs.CLASIFICADA, EstadoIa.COMPLETADA)
+
+    vista = repositorio.obtener(id_pqrs)
+    assert vista is not None and vista.clasificacion is not None
+    assert (vista.nivel_riesgo, vista.termino.id, vista.estado, vista.estado_ia) == (
+        NivelRiesgo.PRIORIZADO, 7, EstadoPqrs.CLASIFICADA, EstadoIa.COMPLETADA,
+    )
+    assert vista.fecha_vencimiento == datetime(2026, 11, 1, 16, tzinfo=ZONA_COLOMBIA)
+    assert vista.clasificacion.origen is OrigenClasificacion.IA
+    assert (vista.clasificacion.modelo, vista.clasificacion.version_instrucciones) == (
+        "claude-haiku-5-5", "clasif-v1.0",
+    )
+    vigentes = conexion.execute(
+        text("SELECT origen, vigente FROM clasificacion WHERE id_pqrs = :id ORDER BY id_clasificacion"),
+        {"id": id_pqrs},
+    ).all()
+    assert [tuple(fila) for fila in vigentes] == [("REGLAS", False), ("IA", True)]
+
+
+def test_marcar_pendiente_solo_si_no_cambio_antes(conexion: Connection) -> None:
+    repositorio = PqrsRepositoryPostgres(conexion)
+    id_pqrs = _registrar(repositorio)
+    repositorio.actualizar_estado(id_pqrs, EstadoPqrs.REQUIERE_REVISION, EstadoIa.FALLIDA)
+
+    assert not repositorio.marcar_pendiente(id_pqrs, EstadoIa.COMPLETADA)
+    assert repositorio.marcar_pendiente(id_pqrs, EstadoIa.FALLIDA)
+    assert not repositorio.marcar_pendiente(id_pqrs, EstadoIa.FALLIDA)
+    datos = repositorio.obtener_para_clasificar(id_pqrs)
+    assert datos is not None
+    assert (datos.estado, datos.estado_ia) == (EstadoPqrs.REQUIERE_REVISION, EstadoIa.PENDIENTE)
+
+
+def test_llamada_ia_guarda_solo_metadatos(conexion: Connection) -> None:
+    id_pqrs = _registrar(PqrsRepositoryPostgres(conexion))
+    auditoria = AuditoriaRepositoryPostgres(conexion)
+
+    primero = auditoria.registrar_llamada_ia(id_pqrs, _uso(ResultadoLlamadaIA.TIMEOUT), "clasif-v1.0")
+    segundo = auditoria.registrar_llamada_ia(id_pqrs, _uso(intento=2), "clasif-v1.0")
+
+    assert segundo == primero + 1
+    filas = conexion.execute(
+        text("SELECT * FROM llamada_ia WHERE id_pqrs = :id ORDER BY id_llamada"), {"id": id_pqrs}
+    ).mappings().all()
+    assert set(filas[0]) == {
+        "id_llamada", "id_pqrs", "operacion", "proveedor", "modelo", "version_instrucciones",
+        "intento", "resultado", "tokens_entrada", "tokens_salida", "costo_usd", "latencia_ms", "fecha",
+    }
+    assert [(f["operacion"], f["intento"], f["resultado"]) for f in filas] == [
+        ("CLASIFICAR", 1, "TIMEOUT"), ("CLASIFICAR", 2, "OK"),
+    ]
+    assert (filas[1]["tokens_entrada"], filas[1]["tokens_salida"], filas[1]["costo_usd"]) == (
+        1200, 150, Decimal("0.000195"),
+    )
+
+
+def test_el_historial_trae_modelo_y_version_en_los_eventos_de_la_ia(conexion: Connection) -> None:
+    id_pqrs = _registrar(PqrsRepositoryPostgres(conexion))
+    auditoria = AuditoriaRepositoryPostgres(conexion)
+    auditoria.registrar(
+        EventoAuditoria(id_pqrs, OrigenEvento.SISTEMA, AccionAuditoria.CLASIFICAR_REGLAS,
+                        campo="tipo", valor_nuevo="RECLAMO")
+    )
+    auditoria.registrar_llamada_ia(id_pqrs, _uso(ResultadoLlamadaIA.TIMEOUT), "clasif-v0.9")
+    auditoria.registrar_llamada_ia(id_pqrs, _uso(intento=2), "clasif-v1.0")
+    auditoria.registrar(
+        EventoAuditoria(id_pqrs, OrigenEvento.IA, AccionAuditoria.CLASIFICAR_IA,
+                        campo="nivel_riesgo", valor_anterior="SIMPLE", valor_nuevo="PRIORIZADO")
+    )
+    auditoria.registrar(
+        EventoAuditoria(id_pqrs, OrigenEvento.SISTEMA, AccionAuditoria.CALCULAR_VENCIMIENTO,
+                        campo="fecha_vencimiento", valor_nuevo="2026-11-01T16:00:00-05:00")
+    )
+
+    eventos = auditoria.historial(id_pqrs)
+
+    assert [(e.accion, e.modelo, e.version_instrucciones) for e in eventos] == [
+        (AccionAuditoria.CLASIFICAR_REGLAS, None, None),
+        (AccionAuditoria.CLASIFICAR_IA, "claude-haiku-5-5", "clasif-v1.0"),
+        (AccionAuditoria.CALCULAR_VENCIMIENTO, None, None),
+    ]
+
+
+def test_sin_llamada_ok_en_la_transaccion_el_evento_no_inventa_modelo(conexion: Connection) -> None:
+    id_pqrs = _registrar(PqrsRepositoryPostgres(conexion))
+    auditoria = AuditoriaRepositoryPostgres(conexion)
+    auditoria.registrar_llamada_ia(id_pqrs, _uso(ResultadoLlamadaIA.SALIDA_INVALIDA), "clasif-v1.0")
+    auditoria.registrar(
+        EventoAuditoria(id_pqrs, OrigenEvento.SISTEMA, AccionAuditoria.SUGERENCIA_IA_NO_APLICADA,
+                        campo="estado", valor_nuevo="REQUIERE_REVISION")
+    )
+
+    (evento,) = auditoria.historial(id_pqrs)
+    assert (evento.modelo, evento.version_instrucciones) == (None, None)

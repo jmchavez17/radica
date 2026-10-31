@@ -277,10 +277,10 @@ class EventoHistorial(_Esquema):
     valor_nuevo: str | None
     motivo: str | None
     modelo: str | None = Field(
-        default=None, description="Solo en eventos de IA; la tabla auditoria aún no lo guarda."
+        default=None, description="Solo en los eventos de una sugerencia de la IA."
     )
     version_instrucciones: str | None = Field(
-        default=None, description="Solo en eventos de IA; la tabla auditoria aún no lo guarda."
+        default=None, description="Solo en los eventos de una sugerencia de la IA."
     )
 
     @classmethod
@@ -295,6 +295,8 @@ class EventoHistorial(_Esquema):
             valor_anterior=evento.valor_anterior,
             valor_nuevo=evento.valor_nuevo,
             motivo=evento.motivo,
+            modelo=evento.modelo,
+            version_instrucciones=evento.version_instrucciones,
         )
 
 

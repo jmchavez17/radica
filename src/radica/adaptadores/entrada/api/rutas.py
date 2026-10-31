@@ -125,8 +125,9 @@ def crear_rutas(fabrica: FabricaDeCasos) -> APIRouter:
         operation_id="consultarHistorial",
         summary="Historial completo de una PQRS (HU-13)",
         description=(
-            "Eventos de auditoría en orden cronológico. modelo y versionInstrucciones quedan nulos"
-            " hasta que la tabla auditoria los guarde."
+            "Eventos de auditoría en orden cronológico. Los eventos de una sugerencia de la IA"
+            " (CLASIFICAR_IA y SUGERENCIA_IA_NO_APLICADA) traen el modelo y la versión de"
+            " instrucciones; los demás los traen nulos."
         ),
         response_model=Historial,
         response_description="Eventos de auditoría de la PQRS.",

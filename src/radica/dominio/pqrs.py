@@ -77,7 +77,11 @@ class Clasificacion:
 
 @dataclass(frozen=True)
 class EventoAuditoria:
-    """Fila de auditoria. La fecha y el id los pone la base al insertar."""
+    """Fila de auditoria. La fecha y el id los pone la base al insertar.
+
+    modelo y version_instrucciones solo se leen: en los eventos de una
+    sugerencia de la IA salen de su llamada en llamada_ia (decisión D3).
+    """
 
     id_pqrs: int
     origen: OrigenEvento
@@ -89,3 +93,5 @@ class EventoAuditoria:
     motivo: str | None = None
     id_evento: int | None = None
     fecha: datetime | None = None
+    modelo: str | None = None
+    version_instrucciones: str | None = None

@@ -3,7 +3,8 @@
 dominio solo importa la biblioteca estándar y el propio dominio; aplicacion
 importa además el dominio, nunca adaptadores ni librerías externas. La API
 (adaptador de entrada) usa FastAPI y el núcleo, nunca SQLAlchemy, los
-adaptadores de salida ni la configuración: eso lo conecta main.py.
+adaptadores de salida ni la configuración: eso lo conecta main.py. El
+trabajador, el otro adaptador de entrada, solo usa el núcleo.
 """
 
 import ast
@@ -25,6 +26,11 @@ PERMITIDOS = {
         "fastapi",
         "pydantic",
         "starlette",
+    ),
+    "adaptadores/entrada/trabajador": (
+        "radica.dominio",
+        "radica.aplicacion",
+        "radica.adaptadores.entrada.trabajador",
     ),
     "adaptadores/salida/palabras_clave": (
         "radica.dominio",

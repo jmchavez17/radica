@@ -84,6 +84,9 @@ def _reglas(tipo: TipoPqrs, nivel: NivelRiesgo) -> ResultadoClasificacion:
     return ResultadoClasificacion(tipo=tipo, id_atributo=None, id_area=4, nivel_riesgo=nivel, confianza=0.5)
 
 
+QUEJA_IA = _ia(TipoPqrs.QUEJA, NivelRiesgo.NO_APLICA)
+
+
 class SinEnmascarar:
     """Enmascarador defectuoso para el registro: deja el texto como llegó."""
 
@@ -441,15 +444,34 @@ def test_un_menor_con_riesgo_vital_queda_con_8_horas(terminos, festivos) -> None
 
 # --- Selección de la PQRS ---
 
-def test_clasificar_siguiente_toma_la_mas_antigua_y_luego_no_hay_mas(terminos, festivos) -> None:
+def test_tomar_siguiente_da_la_mas_antigua_y_luego_no_hay_mas(terminos, festivos) -> None:
     ia = ClasificadorFijo(_ia(TipoPqrs.RECLAMO, NivelRiesgo.SIMPLE))
     escenario = Escenario(terminos, festivos, _reglas(TipoPqrs.RECLAMO, NivelRiesgo.SIMPLE), ia)
     primera, segunda = escenario.registrar_pqrs(), escenario.registrar_pqrs()
 
-    assert escenario.caso.clasificar_siguiente() == primera
-    assert escenario.caso.clasificar_siguiente() == segunda
-    assert escenario.caso.clasificar_siguiente() is None
+    for esperada in (primera, segunda):
+        assert escenario.caso.tomar_siguiente() == esperada
+        escenario.caso.ejecutar(esperada)
+    assert escenario.caso.tomar_siguiente() is None
     assert len(ia.solicitudes) == 2
+
+
+def test_un_error_interno_deja_fallida_para_no_volver_a_tomarla(terminos, festivos) -> None:
+    escenario, id_pqrs, previos = _crear(
+        terminos, festivos, _reglas(TipoPqrs.RECLAMO, NivelRiesgo.SIMPLE), ClasificadorFijo(QUEJA_IA)
+    )
+
+    escenario.caso.registrar_error_interno(id_pqrs)
+    escenario.caso.registrar_error_interno(id_pqrs)  # la segunda vez ya no está pendiente
+
+    pqrs = escenario.pqrs.pqrs[id_pqrs]
+    assert (pqrs.estado, pqrs.estado_ia) == (EstadoPqrs.REQUIERE_REVISION, EstadoIa.FALLIDA)
+    (evento,) = escenario.eventos(id_pqrs, previos)
+    assert (evento.accion, evento.motivo) == (
+        AccionAuditoria.IA_FALLIDA,
+        "Error interno al clasificar. Sigue vigente la clasificación por reglas.",
+    )
+    assert escenario.caso.tomar_siguiente() is None
 
 
 def test_una_pqrs_que_ya_no_esta_pendiente_no_se_vuelve_a_clasificar(terminos, festivos) -> None:

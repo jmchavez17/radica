@@ -2,20 +2,27 @@
 
 Es el único módulo que conoce las clases concretas: lee la configuración y
 conecta cada puerto con su adaptador (Entrega 2, sección 10.6). Cada solicitud
-a la API abre una transacción y recibe repositorios sobre esa conexión.
+a la API y cada PQRS que toma el trabajador abren una transacción y reciben
+repositorios sobre esa conexión.
 
 Servir la API (desde la raíz del proyecto):
     uvicorn --factory radica.main:crear_aplicacion
+Iniciar el trabajador:
+    radica-trabajador
 """
 
+import logging
+import signal
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import datetime
+from types import FrameType
 
 from fastapi import FastAPI
 
 from radica.adaptadores.entrada.api.app import crear_app
 from radica.adaptadores.entrada.api.casos import CasosDeUso
+from radica.adaptadores.entrada.trabajador.bucle import INTERVALO_S, Trabajador
 from radica.adaptadores.salida.cifrado.aes_gcm import CifradorAesGcm
 from radica.adaptadores.salida.enmascarador.reglas import EnmascaradorReglas
 from radica.adaptadores.salida.ia.claude import AdaptadorClaude
@@ -34,14 +41,17 @@ from radica.aplicacion.casos_de_uso.consultas import (
     ListarBandeja,
     ListarTerminos,
 )
+from radica.aplicacion.casos_de_uso.clasificar_pqrs import ClasificarPqrs
 from radica.aplicacion.casos_de_uso.registrar_pqrs import RegistrarPqrs
 from radica.aplicacion.puertos.clasificador import ClasificadorPqrs
 from radica.config import PROVEEDOR_CLAUDE, Configuracion, cargar
 from radica.dominio.plazos import ZONA_COLOMBIA, CalculadoraDePlazos
+from radica.dominio.riesgo import PoliticaDeRiesgo
 from radica.dominio.semaforo import ReglaSemaforo
 
 VERSION_INSTRUCCIONES = "clasif-v1.0"
 ID_USUARIO_ACTOR = 1  # «Funcionario Sintético»: sin autenticación en esta entrega (contexto.md 4.12)
+SEGUN_CONFIGURACION = object()  # componer_trabajador: usar el clasificador que diga IA_PROVIDER
 
 
 def ahora_en_colombia() -> datetime:
@@ -109,3 +119,53 @@ def componer(
 def crear_aplicacion() -> FastAPI:
     """Punto de entrada de uvicorn. No arranca si falta una variable obligatoria."""
     return componer(cargar())
+
+
+def componer_trabajador(
+    configuracion: Configuracion,
+    clasificador_ia: ClasificadorPqrs | None | object = SEGUN_CONFIGURACION,
+    intervalo_s: float = INTERVALO_S,
+) -> Trabajador:
+    """Arma el trabajador; las pruebas pasan su base y un clasificador falso, sin red."""
+    motor = crear_motor(configuracion.url_base_datos)
+    cifrador = CifradorAesGcm(configuracion.llave_cifrado, configuracion.llave_hmac)
+    enmascarador = EnmascaradorReglas()
+    clasificador = (
+        construir_clasificador_ia(configuracion)
+        if clasificador_ia is SEGUN_CONFIGURACION
+        else clasificador_ia
+    )
+    calculadora = CalculadoraDePlazos()
+    politica = PoliticaDeRiesgo(configuracion.umbral_confianza)
+
+    @contextmanager
+    def unidad() -> Iterator[ClasificarPqrs]:
+        with motor.begin() as conexion:
+            yield ClasificarPqrs(
+                pqrs=PqrsRepositoryPostgres(conexion),
+                auditoria=AuditoriaRepositoryPostgres(conexion),
+                configuracion=ConfiguracionRepositoryPostgres(conexion),
+                cifrador=cifrador,
+                enmascarador=enmascarador,
+                clasificador=clasificador,  # type: ignore[arg-type]
+                calculadora=calculadora,
+                politica=politica,
+                version_instrucciones=VERSION_INSTRUCCIONES,
+            )
+
+    return Trabajador(unidad, intervalo_s)
+
+
+def ejecutar_trabajador() -> None:
+    """Comando radica-trabajador. Se detiene con Ctrl+C o con SIGTERM (docker compose stop)."""
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    configuracion = cargar()
+    trabajador = componer_trabajador(configuracion)
+    logging.getLogger("radica.trabajador").info("Proveedor de IA: %s", configuracion.ia_proveedor)
+
+    def detener(_senal: int, _marco: FrameType | None) -> None:
+        trabajador.detener()
+
+    signal.signal(signal.SIGTERM, detener)
+    signal.signal(signal.SIGINT, detener)
+    trabajador.ejecutar()

@@ -16,7 +16,8 @@ from radica.config import url_base_datos
 config = context.config
 
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # Sin apagar los loggers que ya existen: las pruebas migran dentro del mismo proceso.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 
 def _url() -> str:

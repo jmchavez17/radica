@@ -81,13 +81,25 @@ class ClasificarPqrs:
         self._politica = politica
         self._version = version_instrucciones
 
-    def clasificar_siguiente(self) -> int | None:
-        """Toma la PQRS pendiente más antigua que nadie tenga bloqueada; None si no hay."""
+    def tomar_siguiente(self) -> int | None:
+        """La PQRS pendiente más antigua que nadie tenga bloqueada, ya bloqueada; None si no hay."""
         pendientes = self._pqrs.pendientes_de_ia(1)
-        if not pendientes:
-            return None
-        self.ejecutar(pendientes[0])
-        return pendientes[0]
+        return pendientes[0] if pendientes else None
+
+    def registrar_error_interno(self, id_pqrs: int) -> None:
+        """Para el trabajador, en una transacción nueva después de un error inesperado.
+
+        Sin esto la PQRS seguiría PENDIENTE y se volvería a tomar (y a pagar) sin fin.
+        """
+        datos = self._pqrs.obtener_para_clasificar(id_pqrs)
+        if datos is None or datos.estado_ia is not EstadoIa.PENDIENTE:
+            return
+        self._sin_ia(
+            datos,
+            EstadoIa.FALLIDA,
+            AccionAuditoria.IA_FALLIDA,
+            "Error interno al clasificar. Sigue vigente la clasificación por reglas.",
+        )
 
     def ejecutar(self, id_pqrs: int) -> EstadoIa:
         datos = self._pqrs.obtener_para_clasificar(id_pqrs)

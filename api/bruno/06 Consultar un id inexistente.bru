@@ -1,0 +1,23 @@
+meta {
+  name: Consultar un id inexistente
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/v1/pqrs/999999999
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 404
+  res.body.status: eq 404
+  res.body.type: endsWith no-encontrado
+}
+
+tests {
+  test("responde en Problem Details", function () {
+    expect(res.getHeader("content-type")).to.include("application/problem+json");
+  });
+}

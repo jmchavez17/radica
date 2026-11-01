@@ -169,8 +169,12 @@ def test_con_ia_ninguno_la_pqrs_queda_omitida(cliente: TestClient, configuracion
 
     detalle = cliente.get(f"/api/v1/pqrs/{id_pqrs}").json()
     assert (detalle["estado"], detalle["estadoIa"]) == ("REQUIERE_REVISION", "OMITIDA")
-    ultimo = _eventos(cliente, id_pqrs)[-1]
-    assert (ultimo["accion"], ultimo["motivo"]) == ("IA_OMITIDA", "IA desactivada por configuración")
+    ultimos = _eventos(cliente, id_pqrs)[-2:]
+    assert [(e["campo"], e["valorAnterior"], e["valorNuevo"]) for e in ultimos] == [
+        ("estado_ia", "PENDIENTE", "OMITIDA"),
+        ("estado", "REGISTRADA", "REQUIERE_REVISION"),
+    ]
+    assert {(e["accion"], e["motivo"]) for e in ultimos} == {("IA_OMITIDA", "IA desactivada por configuración")}
 
 
 def test_verifica_con_los_datos_del_peticionario_descifrados_de_la_base(

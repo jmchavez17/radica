@@ -273,14 +273,15 @@ def test_proveedor_caido_deja_fallida_y_requiere_revision(terminos, festivos) ->
     assert [c.origen for c in escenario.pqrs.de(id_pqrs)] == [OrigenClasificacion.REGLAS]
     assert escenario.pqrs.vigente(id_pqrs).origen is OrigenClasificacion.REGLAS
     assert [uso.intento for _, uso, _ in escenario.auditoria.llamadas] == [1, 2, 3]
-    (evento,) = escenario.eventos(id_pqrs, previos)
-    assert _campos([evento]) == [
-        (AccionAuditoria.IA_FALLIDA, OrigenEvento.SISTEMA, "estado_ia", "PENDIENTE", "FALLIDA")
+    eventos = escenario.eventos(id_pqrs, previos)
+    assert _campos(eventos) == [
+        (AccionAuditoria.IA_FALLIDA, OrigenEvento.SISTEMA, "estado_ia", "PENDIENTE", "FALLIDA"),
+        (AccionAuditoria.IA_FALLIDA, OrigenEvento.SISTEMA, "estado", "REGISTRADA", "REQUIERE_REVISION"),
     ]
-    assert evento.motivo == (
+    assert {evento.motivo for evento in eventos} == {
         "El proveedor de IA no dio una clasificación válida (TIMEOUT)."
         " Sigue vigente la clasificación por reglas."
-    )
+    }
 
 
 def test_enmascaramiento_no_verificado_omite_la_ia_sin_ninguna_llamada(terminos, festivos) -> None:
@@ -296,14 +297,15 @@ def test_enmascaramiento_no_verificado_omite_la_ia_sin_ninguna_llamada(terminos,
     assert escenario.auditoria.llamadas == []
     pqrs = escenario.pqrs.pqrs[id_pqrs]
     assert (pqrs.estado, pqrs.estado_ia) == (EstadoPqrs.REQUIERE_REVISION, EstadoIa.OMITIDA)
-    (evento,) = escenario.eventos(id_pqrs, previos)
-    assert _campos([evento]) == [
-        (AccionAuditoria.IA_OMITIDA, OrigenEvento.SISTEMA, "estado_ia", "PENDIENTE", "OMITIDA")
+    eventos = escenario.eventos(id_pqrs, previos)
+    assert _campos(eventos) == [
+        (AccionAuditoria.IA_OMITIDA, OrigenEvento.SISTEMA, "estado_ia", "PENDIENTE", "OMITIDA"),
+        (AccionAuditoria.IA_OMITIDA, OrigenEvento.SISTEMA, "estado", "REGISTRADA", "REQUIERE_REVISION"),
     ]
-    assert evento.motivo == (
+    assert {evento.motivo for evento in eventos} == {
         "Enmascaramiento no verificado: quedan datos de tipo TELEFONO. No se llamó a la IA."
-    )
-    assert TELEFONO not in evento.motivo
+    }
+    assert all(TELEFONO not in evento.motivo for evento in eventos)
 
 
 # --- Verificación (4.4) y modo sin IA ---
@@ -334,8 +336,28 @@ def test_con_ia_desactivada_omite_sin_llamar_y_deja_las_reglas(terminos, festivo
     pqrs = escenario.pqrs.pqrs[id_pqrs]
     assert (pqrs.estado, pqrs.estado_ia) == (EstadoPqrs.REQUIERE_REVISION, EstadoIa.OMITIDA)
     assert escenario.pqrs.vigente(id_pqrs).origen is OrigenClasificacion.REGLAS
-    (evento,) = escenario.eventos(id_pqrs, previos)
-    assert (evento.accion, evento.motivo) == (AccionAuditoria.IA_OMITIDA, "IA desactivada por configuración")
+    eventos = escenario.eventos(id_pqrs, previos)
+    assert [evento.campo for evento in eventos] == ["estado_ia", "estado"]
+    assert {(evento.accion, evento.motivo) for evento in eventos} == {
+        (AccionAuditoria.IA_OMITIDA, "IA desactivada por configuración")
+    }
+
+
+def test_al_omitir_de_nuevo_una_pqrs_que_ya_pedia_revision_solo_cambia_estado_ia(
+    terminos, festivos
+) -> None:
+    escenario, id_pqrs, _ = _crear(
+        terminos, festivos, _reglas(TipoPqrs.RECLAMO, NivelRiesgo.SIMPLE), clasificador=None
+    )
+    escenario.caso.ejecutar(id_pqrs)
+    assert escenario.pqrs.marcar_pendiente(id_pqrs, EstadoIa.OMITIDA)  # el reintento manual
+    previos = len(escenario.auditoria.historial(id_pqrs))
+
+    assert escenario.caso.ejecutar(id_pqrs) is EstadoIa.OMITIDA
+
+    assert _campos(escenario.eventos(id_pqrs, previos)) == [
+        (AccionAuditoria.IA_OMITIDA, OrigenEvento.SISTEMA, "estado_ia", "PENDIENTE", "OMITIDA")
+    ]
 
 
 def test_la_solicitud_lleva_el_texto_enmascarado_el_catalogo_y_la_version(terminos, festivos) -> None:
@@ -466,11 +488,11 @@ def test_un_error_interno_deja_fallida_para_no_volver_a_tomarla(terminos, festiv
 
     pqrs = escenario.pqrs.pqrs[id_pqrs]
     assert (pqrs.estado, pqrs.estado_ia) == (EstadoPqrs.REQUIERE_REVISION, EstadoIa.FALLIDA)
-    (evento,) = escenario.eventos(id_pqrs, previos)
-    assert (evento.accion, evento.motivo) == (
-        AccionAuditoria.IA_FALLIDA,
-        "Error interno al clasificar. Sigue vigente la clasificación por reglas.",
-    )
+    eventos = escenario.eventos(id_pqrs, previos)
+    assert [evento.campo for evento in eventos] == ["estado_ia", "estado"]
+    assert {(evento.accion, evento.motivo) for evento in eventos} == {
+        (AccionAuditoria.IA_FALLIDA, "Error interno al clasificar. Sigue vigente la clasificación por reglas.")
+    }
     assert escenario.caso.tomar_siguiente() is None
 
 

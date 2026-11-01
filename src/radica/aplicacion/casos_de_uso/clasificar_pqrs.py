@@ -174,19 +174,29 @@ class ClasificarPqrs:
     def _sin_ia(
         self, datos: PqrsParaClasificar, estado_ia: EstadoIa, accion: AccionAuditoria, motivo: str
     ) -> EstadoIa:
-        """OMITIDA o FALLIDA: la clasificación por reglas sigue vigente y la PQRS pide revisión."""
+        """OMITIDA o FALLIDA: la clasificación por reglas sigue vigente y la PQRS pide revisión.
+
+        Un evento por campo que cambia: estado_ia y, si no pedía revisión ya, estado.
+        """
         self._pqrs.actualizar_estado(datos.id, EstadoPqrs.REQUIERE_REVISION, estado_ia)
-        self._auditoria.registrar(
-            EventoAuditoria(
-                datos.id,
-                OrigenEvento.SISTEMA,
-                accion,
-                campo="estado_ia",
-                valor_anterior=datos.estado_ia.value,
-                valor_nuevo=estado_ia.value,
-                motivo=_recortar(motivo),
+        cambios = [
+            _Cambio("estado_ia", datos.estado_ia.value, estado_ia.value),
+            _Cambio("estado", datos.estado.value, EstadoPqrs.REQUIERE_REVISION.value),
+        ]
+        for cambio in cambios:
+            if cambio.anterior == cambio.nuevo:
+                continue
+            self._auditoria.registrar(
+                EventoAuditoria(
+                    datos.id,
+                    OrigenEvento.SISTEMA,
+                    accion,
+                    campo=cambio.campo,
+                    valor_anterior=str(cambio.anterior),
+                    valor_nuevo=str(cambio.nuevo),
+                    motivo=_recortar(motivo),
+                )
             )
-        )
         return estado_ia
 
     def _aplicar_politica(

@@ -10,7 +10,18 @@ post {
   auth: none
 }
 
+assert {
+  res.status: eq 202
+  res.body.id: eq {{idPqrs}}
+  res.body.estadoIa: eq PENDIENTE
+}
+
+script:pre-request {
+  await bru.sleep(7000);
+}
+
 docs {
+  Con IA_PROVIDER=ninguno, a los 7 s el trabajador (revisa la cola cada 5 s) ya la dejó OMITIDA:
   202 {id, estadoIa: PENDIENTE} y el trabajador la clasifica otra vez.
-  409 si todavía está PENDIENTE (por ejemplo, justo después de registrarla) o si está RESPONDIDA o CERRADA.
+  409 si todavía está PENDIENTE (ver «Reintentar sin esperar») o si está RESPONDIDA o CERRADA.
 }

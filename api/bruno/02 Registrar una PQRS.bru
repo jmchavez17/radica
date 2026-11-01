@@ -15,7 +15,7 @@ body:json {
     "canal": "DIME",
     "sede": "Sede clínica",
     "fechaRadicacion": "2026-10-30T16:00:00-05:00",
-    "texto": "Desde hace tres semanas me ordenaron una resonancia y no me han dado la autorización. Llamé dos veces y nadie responde. Mi teléfono es 3000000000.",
+    "texto": "Pido que me envíen la guía de bienvenida del programa de salud oral. Mi teléfono es 3000000000.",
     "pacienteMenorDeEdad": false,
     "peticionario": {
       "tipoDocumento": "CC",
@@ -29,13 +29,22 @@ body:json {
 
 vars:post-response {
   idPqrs: res.body.id
+  radicadoPqrs: res.body.radicado
 }
 
 assert {
   res.status: eq 201
+  res.headers.location: eq /api/v1/pqrs/{{idPqrs}}
+  res.body.estadoIa: eq PENDIENTE
+  res.body.clasificacionProvisional.origen: eq REGLAS
+  res.body.clasificacionProvisional.tipo: eq PETICION
+  res.body.clasificacionProvisional.nivelRiesgo: eq NO_APLICA
+  res.body.vencimiento.fecha: eq 2026-11-24T23:59:59-05:00
+  res.body.vencimiento.regla: eq Petición: 15 días hábiles
 }
 
 docs {
-  HU-01. Datos sintéticos. Guarda el id en la variable idPqrs para las solicitudes siguientes.
+  HU-01. Datos sintéticos; el texto no tiene palabras del diccionario, por eso queda como PETICION.
+  Guarda idPqrs y radicadoPqrs para las solicitudes siguientes.
   La respuesta trae la clasificación provisional por reglas; la de IA la hace después el trabajador.
 }

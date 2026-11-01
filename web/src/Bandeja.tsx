@@ -154,7 +154,7 @@ export function Bandeja() {
         </div>
       </form>
 
-      <p className="vacio" aria-live="polite">
+      <p className="cargando" aria-live="polite">
         {cargando ? "Cargando…" : ""}
       </p>
 

@@ -13,7 +13,8 @@ Hoy contiene:
 - Las reglas puras del dominio: selección del término, CalculadoraDePlazos, semáforo y PoliticaDeRiesgo.
 - El puerto `ClasificadorPqrs` y su contrato. La clasificación provisional la hace `ClasificadorPalabrasClave`, con su diccionario versionado en `src/radica/adaptadores/salida/palabras_clave/diccionario.json`. Las instrucciones de Claude están en `src/radica/adaptadores/salida/ia/instrucciones/clasif-v1.0.md`.
 - 12 PQRS sintéticas para la demostración en `datos/sinteticos/demo.json`, con el formato de entrada de `POST /api/v1/pqrs`.
-- Docker Compose con `db`, `api` y `trabajador`, y dos migraciones de Alembic: las 13 tablas del modelo de datos v1.1 y los datos semilla.
+- Una interfaz web mínima en `web/` (React con TypeScript): el formulario de registro y la bandeja con semáforo, filtros y paginación. No calcula nada: muestra lo que responde la API.
+- Docker Compose con `db`, `api`, `trabajador` y `web`, y dos migraciones de Alembic: las 13 tablas del modelo de datos v1.1 y los datos semilla.
 - Una colección de Bruno en `api/bruno/`.
 - El OpenAPI que genera la API, en `docs/api/openapi-implementada.json`, comparado con el contrato en `docs/api/diferencias.md`.
 - Pruebas unitarias y de integración contra PostgreSQL. Ninguna usa la red ni la clave real.
@@ -43,7 +44,7 @@ Hoy contiene:
 
 ## Tecnologías
 
-Versiones fijadas en `pyproject.toml` y en las imágenes de `Dockerfile` y `docker-compose.yml`:
+Versiones fijadas en `pyproject.toml`, `web/package.json` y en las imágenes de `Dockerfile`, `web/Dockerfile` y `docker-compose.yml`:
 
 | Pieza | Versión | Uso |
 | --- | --- | --- |
@@ -62,13 +63,22 @@ Versiones fijadas en `pyproject.toml` y en las imágenes de `Dockerfile` y `dock
 | pytest | 9.2.0 | Pruebas (dependencia de desarrollo) |
 | httpx2 | 2.16.0 | Cliente del TestClient de Starlette y de las pruebas del SDK de Anthropic (dependencia de desarrollo) |
 | setuptools | 84.2.1 | Construcción del paquete |
-| Docker Compose | Probado con v5.6.1 y Docker Engine 29.9.2 | Servicios `db`, `api` y `trabajador` |
+| Docker Compose | Probado con v5.6.1 y Docker Engine 29.9.2 | Servicios `db`, `api`, `trabajador` y `web` |
 | Bruno | Aplicación de escritorio | Colección de la API en `api/bruno/` |
+| React y react-dom | 19.3.1 | Interfaz web (ADR-06) |
+| TypeScript | 7.0.2 | Revisión de tipos de la interfaz antes de construir (desarrollo) |
+| Vite | 8.3.5 | Empaqueta la interfaz en archivos estáticos (desarrollo) |
+| @types/react y @types/react-dom | 19.3.0 | Tipos de React para TypeScript (desarrollo) |
+| Vitest | 5.0.5 | Pruebas de la interfaz (desarrollo) |
+| jsdom | 30.1.3 | DOM simulado para las pruebas de la interfaz (desarrollo) |
+| Node.js | Imagen `node:24.22.2-alpine3.24`, solo para construir; 26.13.0 en el equipo local, opcional | Construye y prueba la interfaz |
+| nginx | Imagen `nginxinc/nginx-unprivileged:1.30.6-alpine3.24` | Sirve la interfaz sin privilegios y lleva `/api/` y `/health` a la API |
 
 ## Requisitos
 
 - Python 3.12
 - Docker con Docker Compose
+- Node.js, solo para correr las pruebas de la interfaz fuera de Docker (probado con 26.13.0)
 
 ## Primeros pasos (PowerShell)
 
@@ -165,22 +175,81 @@ La solicitud a Claude no lleva `temperature`: Claude Haiku 5.5 y la versión de 
 docker compose up -d --build
 ```
 
-Levanta `db`, `api` (migra antes de servir, en http://127.0.0.1:8000) y `trabajador`. Una variable definida en la consola manda sobre la del `.env`; por ejemplo, para probar sin llamar a Claude: `$env:IA_PROVIDER = "ninguno"; docker compose up -d`. La imagen no lleva el `.env`.
+Levanta `db`, `api` (migra antes de servir, en http://127.0.0.1:8000), `trabajador` y `web` (la interfaz, en http://127.0.0.1:8080). Una variable definida en la consola manda sobre la del `.env`; por ejemplo, para probar sin llamar a Claude: `$env:IA_PROVIDER = "ninguno"; docker compose up -d`. La imagen no lleva el `.env`.
 
 Cada servicio tiene su verificación de salud:
 
 - `db`, con `pg_isready`;
 - `api`, con `/health`;
-- `trabajador`, comprobando que su configuración es válida y que llega a la base. No comprueba que el bucle siga vivo: si el proceso muere, el contenedor termina y Compose lo reinicia.
+- `trabajador`, comprobando que su configuración es válida y que llega a la base. No comprueba que el bucle siga vivo: si el proceso muere, el contenedor termina y Compose lo reinicia;
+- `web`, pidiendo `/` a nginx con `wget`.
 
-La API espera a que la base esté sana, y el trabajador a la API. Verificación desde cero:
+La API espera a que la base esté sana, y el trabajador y la interfaz esperan a la API. Verificación desde cero:
 
 ```powershell
 docker compose down -v                # borra también la base de desarrollo
-docker compose up -d --build --wait   # espera a que los tres servicios estén sanos
-docker compose ps                     # db, api y trabajador: (healthy)
+docker compose up -d --build --wait   # espera a que los cuatro servicios estén sanos
+docker compose ps                     # db, api, trabajador y web: (healthy)
 curl.exe -s http://127.0.0.1:8000/health
+curl.exe -s http://127.0.0.1:8080/health   # la misma ruta, a través de la interfaz
 ```
+
+## Interfaz web
+
+Una interfaz mínima en `web/`, de la sesión 7: React 19 con TypeScript (ADR-06), empaquetada con Vite y servida por nginx. Se levanta con los demás servicios:
+
+```powershell
+$env:IA_PROVIDER = "ninguno"; docker compose up -d --build --wait
+```
+
+Abre http://127.0.0.1:8080. Tiene dos pestañas:
+
+- **Registrar PQRS** (`#registro`): los campos y límites de `docs/contexto.md` §4.1; llama a `POST /api/v1/pqrs`.
+  - Con 201 muestra el radicado, el estado, la clasificación provisional y el vencimiento con su semáforo, tal como los devuelve la API, y vacía el formulario.
+  - Con 400 pone cada mensaje de `errores[]` debajo de su campo, según `campo` (`texto`, `peticionario.nombre`…); un campo que no está en el formulario va al resumen. Con otro error muestra el `title` y el `detail` de Problem Details.
+  - La fecha se escribe en la hora local del campo y se envía como hora de Colombia (`-05:00`).
+- **Bandeja** (`#bandeja`): `GET /api/v1/pqrs` con los filtros `semaforo`, `estado`, `tipo` e `idArea` (el id del área sugerida; la tabla lo muestra junto al nombre) y con `pagina` y `tamano`. Las filas salen en el orden en que las entrega la API: primero las vencidas y luego por vencimiento.
+
+Cómo funciona:
+
+- **Sin lógica de negocio.** El semáforo, las horas restantes, el vencimiento, el orden y la validación los calcula la API. El formulario lleva `noValidate`: los obligatorios y el formato los dice el 400. La interfaz solo da formato a fechas y números.
+- **Mismo origen, sin CORS.** nginx sirve los archivos estáticos y lleva `/api/` y `/health` a `http://api:8000` por la red de Compose. La interfaz usa rutas relativas, así que la API no necesita CORS y `src/` no cambia. La API sigue en http://127.0.0.1:8000 para Swagger y Bruno.
+- **Datos del peticionario.** Solo viven en el formulario hasta el registro. La interfaz no usa `localStorage`, `sessionStorage`, cookies ni la consola, y los campos del peticionario no se autocompletan. El navegador sí escribe por su cuenta en la consola cada respuesta 400 («Failed to load resource»), sin datos del peticionario.
+- **Caché.** `/api/` sale con `no-store`, `index.html` con `no-cache` y `/assets/`, que lleva un hash en el nombre, con caché larga.
+- **Contenedor.** Publicado solo en `127.0.0.1:8080`. nginx corre como el usuario 101, con el sistema de archivos de solo lectura (`/tmp` en memoria), sin capacidades, y con las cabeceras `Content-Security-Policy`, `X-Content-Type-Options` y `Referrer-Policy`.
+
+`web/Dockerfile` construye en cuatro etapas: `dependencias` (`npm ci`, sin scripts de instalación), `pruebas` (Vitest), `construccion` (`tsc` y `vite build`) y la imagen de nginx. Si una prueba falla, la imagen no se construye. Para ver la salida de las pruebas:
+
+```powershell
+docker build --target pruebas --no-cache-filter pruebas --progress=plain --build-context contrato=docs/api web
+```
+
+Con Node.js instalado también corren fuera de Docker:
+
+```powershell
+cd web
+npm ci
+npm test         # Vitest con jsdom
+npm run build    # tsc y vite build, en web/dist
+```
+
+Las pruebas están en `web/src/pruebas/` y no usan la red: un doble reemplaza `fetch`.
+
+- `api.test.ts`: el cliente de la API, para 201, 400, 500, 502 y sin conexión, y la URL de la bandeja.
+- `Registro.test.tsx` y `Bandeja.test.tsx`: los componentes, con el `act` de React.
+- `contrato.test.ts`: compara las listas y los límites de `web/src/tipos.ts` con `docs/api/openapi-implementada.json`, que llega a la construcción por el contexto adicional `contrato`. Si la API cambia un enum, un límite o un filtro, falla.
+- `sin-almacenamiento.test.ts`: revisa que el código no use el almacenamiento del navegador ni la consola. Además, la preparación de las pruebas falla si algo escribe en la consola.
+
+Dependencias de npm, con versión exacta en `web/package.json` y `web/package-lock.json` (generado en la imagen de Node; `web/.npmrc` desactiva los scripts de instalación):
+
+| Paquete | Para qué |
+| --- | --- |
+| `react`, `react-dom` | Componentes y montaje en el navegador (ADR-06). Son las únicas que llegan al navegador |
+| `typescript` | Revisa los tipos antes de construir |
+| `vite` | Empaqueta TS y TSX en archivos estáticos. Transforma el JSX por sí solo, sin `@vitejs/plugin-react`, que solo hace falta para la recarga en caliente del servidor de desarrollo |
+| `@types/react`, `@types/react-dom` | Tipos de React |
+| `vitest` | Corre las pruebas con la configuración de Vite |
+| `jsdom` | DOM simulado para probar los componentes; sin Testing Library |
 
 ## Colección de Bruno
 
@@ -215,7 +284,8 @@ Fuera de esta entrega por `docs/contexto.md` §2.3. Las 13 tablas sí están cre
 | Detección de posibles duplicados | PB-27 | Pendiente |
 | Adaptador de Gemini como proveedor alterno | ADR-05 | Pendiente |
 | Enmascaramiento de nombres y direcciones con un modelo local | PB-05 (#18) | Pendiente |
-| Interfaz web | — | Pendiente |
+| Interfaz web: detalle, historial y reintento (el registro y la bandeja ya están en `web/`) | — | Pendiente |
+| Alertas de vencimiento: la lista de amarillas y vencidas | PB-12 (#10), en parte | Pendiente |
 
 PB-26, PB-27 y PB-28 salieron de la entrevista de la Entrega 2 y todavía no tienen issue.
 
@@ -237,6 +307,7 @@ El detalle de la API está en [docs/api/diferencias.md](docs/api/diferencias.md)
   - el correo se valida con una expresión regular, porque `email-validator` rechaza los dominios `.test`;
   - una fecha de radicación futura responde 400.
 - **Base de datos:** se publica en `127.0.0.1:5433`, porque el 5432 lo ocupa un PostgreSQL local.
+- **Interfaz web:** es mínima (registro y bandeja) y llega a la API por un proxy de nginx en el mismo origen; la API no tiene CORS. El filtro de área es un número, porque la API no tiene catálogo de áreas.
 
 ## Uso de IA en el desarrollo
 
@@ -262,6 +333,8 @@ migraciones/        Alembic
 tests/              unitarios e integración
 docs/               especificación, modelo de datos, diseño, contrato de la API y registro de uso de IA
 api/bruno/          colección de la API para Bruno
+web/                interfaz web: React con TypeScript, su Dockerfile y nginx.conf
+  src/              componentes, cliente de la API, tipos y pruebas (src/pruebas/)
 Dockerfile          imagen de la API y del trabajador
 ```
 

@@ -33,6 +33,15 @@
                   "$ref": "#/components/schemas/PqrsCreada"
                 }
               }
+            },
+            "headers": {
+              "Location": {
+                "description": "Ruta del recurso creado.",
+                "schema": {
+                  "type": "string",
+                  "example": "/api/v1/pqrs/1287"
+                }
+              }
             }
           },
           "400": {
@@ -58,6 +67,16 @@
                       "mensaje": "Debe ser una fecha ISO 8601 con zona horaria."
                     }
                   ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Falta configuración para calcular el vencimiento (contexto.md 4.6) o hubo un error no controlado. Sin detalles internos.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problema"
                 }
               }
             }
@@ -391,13 +410,26 @@
           "Técnico"
         ],
         "summary": "Estado de la API y de la base de datos",
-        "operationId": "salud_health_get",
+        "operationId": "consultarSalud",
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "La API y la base de datos responden.",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {},
+                "example": {
+                  "estado": "ok"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "La base de datos no responde.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problema"
+                }
               }
             }
           }

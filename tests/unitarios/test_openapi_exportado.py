@@ -50,5 +50,16 @@ def test_el_archivo_tiene_las_6_operaciones_del_contrato_y_health(exportado: dic
         for operacion in ruta.values()
     }
 
-    assert operaciones - {"salud_health_get"} == OPERACIONES_DEL_CONTRATO
-    assert "get" in exportado["paths"]["/health"]
+    assert operaciones - {"consultarSalud"} == OPERACIONES_DEL_CONTRATO
+    assert exportado["paths"]["/health"]["get"]["operationId"] == "consultarSalud"
+
+
+def test_el_archivo_publica_location_el_500_del_registro_y_el_503_de_health(
+    exportado: dict[str, Any],
+) -> None:
+    registro = exportado["paths"]["/api/v1/pqrs"]["post"]["responses"]
+    salud = exportado["paths"]["/health"]["get"]["responses"]
+
+    assert "Location" in registro["201"]["headers"]
+    assert "application/problem+json" in registro["500"]["content"]
+    assert "application/problem+json" in salud["503"]["content"]

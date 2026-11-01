@@ -208,7 +208,7 @@ def test_el_openapi_publica_400_y_no_422(cliente: TestClient) -> None:
     operaciones = [op for ruta in esquema["paths"].values() for op in ruta.values()]
     assert all("422" not in op["responses"] for op in operaciones)
     registro = esquema["paths"]["/api/v1/pqrs"]["post"]["responses"]
-    assert set(registro) == {"201", "400"}
+    assert set(registro) == {"201", "400", "500"}
     assert registro["400"]["content"][PROBLEMA]["example"]["status"] == 400
     assert "HTTPValidationError" not in esquema["components"]["schemas"]
     assert {"PqrsNueva", "PqrsCreada", "PqrsDetalle", "Problema"} <= set(esquema["components"]["schemas"])

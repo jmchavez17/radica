@@ -13,13 +13,13 @@ Compara [`openapi-implementada.json`](openapi-implementada.json), el OpenAPI que
 
 | operationId | Método y ruta | Códigos del contrato | Códigos implementados | Diferencias |
 | --- | --- | --- | --- | --- |
-| `registrarPqrs` | `POST /api/v1/pqrs` | 201, 400, 401, 403 | 201, 400 | Sin 401 ni 403. 400 también si la fecha de radicación es posterior al registro. 500 en Problem Details si no hay término vigente (contexto.md 4.6) |
+| `registrarPqrs` | `POST /api/v1/pqrs` | 201, 400, 401, 403 | 201, 400, 500 | Sin 401 ni 403. 400 también si la fecha de radicación es posterior al registro. 500 si falta configuración para calcular el vencimiento (contexto.md 4.6) |
 | `listarPqrs` | `GET /api/v1/pqrs` | 200, 401 | 200, 400 | 400 si un filtro o la paginación no son válidos (contexto.md 4.10). La respuesta tiene nombre: `PaginaPqrs` |
 | `consultarPqrs` | `GET /api/v1/pqrs/{id}` | 200, 401, 404 | 200, 400, 404 | 400 si el id no es un entero mayor o igual a 1 |
 | `solicitarClasificacionIa` | `POST /api/v1/pqrs/{id}/clasificaciones` | 202, 404, 409 | 202, 400, 404, 409 | El 202 tiene esquema propio: `ClasificacionSolicitada`. 409 si ya está PENDIENTE o si está RESPONDIDA o CERRADA |
 | `consultarHistorial` | `GET /api/v1/pqrs/{id}/historial` | 200, 404 | 200, 400, 404 | El contrato no define el cuerpo; la API responde `{eventos: [...]}` |
 | `listarTerminos` | `GET /api/v1/configuracion/terminos` | 200 | 200 | El contrato no define el cuerpo; la API responde `{terminos: [...]}` |
-| — | `GET /health` | No está | 200, 503 | Ruta técnica para Docker: comprueba la conexión a la base (contexto.md 4.10) |
+| `consultarSalud` | `GET /health` | No está | 200, 503 | Ruta técnica para Docker: comprueba la conexión a la base (contexto.md 4.10) |
 
 En todas las rutas, una ruta inexistente responde 404, un método no permitido 405 y un error no controlado 500, siempre en Problem Details y sin detalles internos.
 
@@ -91,11 +91,15 @@ Los nombres de los esquemas del contrato se conservan: `PqrsNueva`, `PqrsCreada`
 - **`id`:** el contrato lo publica como `int64`; el generado, como `integer` con `minimum: 1`.
 - **`Problema.type`:** el contrato lo publica como `format: uri`; el generado, como `string`. Los valores son URI (`https://radica.local/problemas/...`).
 
-### 4.7 Lo que la API hace y su OpenAPI no publica
+### 4.7 Respuestas declaradas a mano en el OpenAPI
 
-- `POST /pqrs` envía la cabecera `Location: /api/v1/pqrs/{id}`. El contrato la documenta; el OpenAPI generado no.
-- `GET /health` responde 503 en Problem Details si la base no responde. El OpenAPI generado solo publica el 200, con la descripción por defecto de FastAPI.
-- El 500 de un término no configurado no figura en ninguna ruta.
+FastAPI no deduce estas respuestas del código: se declaran en las rutas desde la sesión 6.
+
+- La cabecera `Location: /api/v1/pqrs/{id}` del 201 del registro, como en el contrato.
+- El 500 del registro, cuando falta configuración para calcular el vencimiento.
+- El 503 de `GET /health`, en Problem Details, con el `operationId` `consultarSalud`.
+
+El 500 de un error no controlado puede darse en cualquier ruta, pero solo se publica en el registro.
 
 ### 4.8 Decisiones que no cambian el contrato
 

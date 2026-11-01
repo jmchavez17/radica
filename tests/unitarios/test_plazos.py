@@ -8,6 +8,7 @@ import pytest
 from radica.dominio.plazos import (
     ZONA_COLOMBIA,
     CalculadoraDePlazos,
+    CalendarioIncompleto,
     Termino,
     TerminoNoConfigurado,
     nivel_efectivo,
@@ -85,6 +86,34 @@ def test_las_horas_corridas_no_dependen_de_la_zona_de_entrada(terminos: tuple[Te
 def test_la_calculadora_rechaza_fechas_sin_zona(terminos: tuple[Termino, ...]) -> None:
     with pytest.raises(ValueError, match="zona horaria"):
         CalculadoraDePlazos().calcular(terminos[0], datetime(2026, 10, 30, 16), frozenset())
+
+
+def test_el_ultimo_anio_con_festivos_se_cuenta_completo(
+    terminos: tuple[Termino, ...], festivos: frozenset[date]
+) -> None:
+    # 15 días hábiles desde el miércoles 2027-12-01, sin el festivo del 8 de diciembre.
+    fecha = _bogota("2027-12-01 10:00")
+    termino = seleccionar_termino(terminos, P.PETICION, N.NO_APLICA, False, fecha)
+
+    assert CalculadoraDePlazos().calcular(termino, fecha, festivos) == _bogota("2027-12-23 23:59:59")
+
+
+def test_un_conteo_que_pasa_a_un_anio_sin_festivos_falla_en_vez_de_inventar_el_plazo(
+    terminos: tuple[Termino, ...], festivos: frozenset[date]
+) -> None:
+    # Las semillas traen 2026 y 2027: el 2028-01-10 (Reyes) se contaría como hábil.
+    fecha = _bogota("2027-12-20 09:00")
+    termino = seleccionar_termino(terminos, P.CONSULTA, N.NO_APLICA, False, fecha)
+
+    with pytest.raises(CalendarioIncompleto, match="festivos de 2028"):
+        CalculadoraDePlazos().calcular(termino, fecha, festivos)
+
+
+def test_las_horas_corridas_no_necesitan_festivos_del_anio(terminos: tuple[Termino, ...]) -> None:
+    fecha = _bogota("2027-12-31 20:00")
+    termino = seleccionar_termino(terminos, P.RECLAMO, N.VITAL, False, fecha)
+
+    assert CalculadoraDePlazos().calcular(termino, fecha, frozenset()) == _bogota("2028-01-01 20:00")
 
 
 def test_un_reclamo_sin_nivel_queda_simple(terminos: tuple[Termino, ...]) -> None:

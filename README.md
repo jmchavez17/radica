@@ -105,6 +105,8 @@ alembic downgrade base    # las deshace: borra las tablas y los datos
 
 En Docker, la API ejecuta `alembic upgrade head` antes de servir.
 
+Los festivos llegan hasta 2027. Si el conteo en días hábiles de una PQRS pasa a 2028, el registro responde 500 de configuración en vez de contar como hábiles los festivos de ese año. Si el conteo que pasa a 2028 es el de la sugerencia de la IA, el trabajador deja la PQRS FALLIDA, con la clasificación por reglas vigente. Para 2028 hace falta una migración nueva con sus festivos, antes de noviembre de 2027.
+
 ## Levantar la API
 
 `.env` debe tener además `RADICA_LLAVE_CIFRADO` y `RADICA_LLAVE_HMAC`, distintas entre sí; `.env.example` explica cómo generarlas. Sin ellas la API no arranca. `RADICA_UMBRAL_AMARILLO` es la fracción de tiempo restante desde la cual el semáforo pasa a amarillo; por defecto 0.5 (contexto.md 4.7).
@@ -132,7 +134,7 @@ Los errores salen en Problem Details (`application/problem+json`):
 - **400**: datos o parámetros inválidos, con la lista `errores: [{campo, mensaje}]`. También una fecha de radicación posterior al registro.
 - **404**: la PQRS no existe.
 - **409**: el reintento no procede porque la PQRS ya está PENDIENTE o está RESPONDIDA o CERRADA.
-- **500**: falta un término legal vigente para la clasificación, o hubo un error no controlado. Nunca lleva detalles internos.
+- **500**: falta configuración para calcular el vencimiento, o hubo un error no controlado. Nunca lleva detalles internos. Falta configuración cuando no hay un término legal vigente para la clasificación, o cuando el conteo en días hábiles pasa por un año sin festivos cargados.
 - **503**: `/health` no llega a la base.
 - En cualquier ruta, 404 si la ruta no existe y 405 si el método no está permitido.
 

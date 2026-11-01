@@ -10,6 +10,10 @@ build/
 dist/
 .pytest_cache/
 
+# Interfaz web: dependencias y construcción locales
+web/node_modules/
+web/dist/
+
 # Configuración local de cada equipo: editor y permisos de Claude Code.
 .vscode/
 .claude/settings.local.json

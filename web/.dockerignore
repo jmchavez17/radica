@@ -1,0 +1,3 @@
+# La imagen instala sus propias dependencias con npm ci y construye dist/ adentro.
+node_modules/
+dist/

@@ -12,9 +12,27 @@ get {
 
 assert {
   res.status: eq 200
+  res.body.id: eq {{idPqrs}}
+  res.body.radicado: eq {{radicadoPqrs}}
+  res.body.peticionario: isUndefined
+}
+
+tests {
+  test("el teléfono sale enmascarado", function () {
+    expect(res.body.textoEnmascarado).to.include("[TELEFONO_1]");
+    expect(res.body.textoEnmascarado).to.not.include("3000000000");
+  });
+
+  test("ningún dato del peticionario en la respuesta", function () {
+    const cuerpo = JSON.stringify(res.body);
+    for (const dato of ["1000000001", "Usuario Sintético Uno", "3000000000", "usuario1@ejemplo.com"]) {
+      expect(cuerpo).to.not.include(dato);
+    }
+  });
 }
 
 docs {
   HU-04 y HU-07. Después de que el trabajador procesa la PQRS, estadoIa deja de ser PENDIENTE y,
   si la IA respondió, la clasificación vigente trae origen IA, modelo y versionInstrucciones.
+  Por eso aquí no se afirman los campos que cambia el trabajador.
 }

@@ -37,8 +37,11 @@ docker compose up -d db           # PostgreSQL 16 en 127.0.0.1:5433 (el 5432 lo 
 alembic upgrade head              # migrar
 pytest                            # probar; sin RADICA_DB_URL las pruebas de integración se omiten
 radica-trabajador                 # trabajador de la IA; con IA_PROVIDER=ninguno no llama a nadie
-docker compose up -d --build      # db, api y trabajador
+docker compose up -d --build      # db, api, trabajador y web (interfaz en 127.0.0.1:8080)
+cd web; npm ci; npm test          # pruebas de la interfaz; también corren al construir su imagen
 ```
+
+La interfaz (`web/`, React con TypeScript) no tiene lógica de negocio: muestra lo que responde la API y llega a ella por el proxy de nginx en el mismo origen, sin CORS. No guarda datos del peticionario en el navegador ni escribe en la consola.
 
 Nunca llamar al `python` del sistema (se cuelga): usar siempre el del entorno virtual. Las pruebas no usan la red ni `IA_API_KEY`; el SDK de Anthropic se prueba con un cliente falso (`tests/unitarios/dobles.py`).
 

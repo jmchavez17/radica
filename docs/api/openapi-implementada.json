@@ -1,0 +1,1365 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Radica API",
+    "description": "\nAPI del asistente de gestión de PQRS Radica (Entrega 3). Implementa 6 de las\n13 operaciones del contrato `docs/api/radica-api-v0.1.yaml` más `GET /health`.\nLa clasificación con IA la hace en segundo plano el trabajador (`radica-trabajador`).\n\n- JSON en camelCase; fechas ISO 8601 con zona horaria (America/Bogota, -05:00).\n- Errores en Problem Details (RFC 9457), `application/problem+json`. La\n  validación responde 400.\n- Sin autenticación en esta entrega: las acciones se atribuyen al usuario\n  semilla «Funcionario Sintético» (contexto.md 4.12).\n- Todos los datos son sintéticos. Ninguna respuesta lleva datos del peticionario.\n",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/v1/pqrs": {
+      "post": {
+        "tags": [
+          "PQRS"
+        ],
+        "summary": "Registrar una PQRS (HU-01)",
+        "description": "Valida y guarda la PQRS, asigna el radicado, aplica la clasificación provisional por reglas, calcula el vencimiento y deja la clasificación con IA en PENDIENTE. No espera a la IA. Rechaza una fecha de radicación posterior al momento del registro.",
+        "operationId": "registrarPqrs",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PqrsNueva"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "PQRS registrada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PqrsCreada"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos faltantes o con formato inválido.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problema"
+                },
+                "example": {
+                  "type": "https://radica.local/problemas/validacion",
+                  "title": "Datos inválidos",
+                  "status": 400,
+                  "detail": "La solicitud tiene 2 errores de validación.",
+                  "instance": "/api/v1/pqrs",
+                  "errores": [
+                    {
+                      "campo": "texto",
+                      "mensaje": "El texto es obligatorio."
+                    },
+                    {
+                      "campo": "fechaRadicacion",
+                      "mensaje": "Debe ser una fecha ISO 8601 con zona horaria."
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "PQRS"
+        ],
+        "summary": "Bandeja de PQRS con semáforo (HU-08)",
+        "description": "Ordenada por vencimiento ascendente: las vencidas quedan primero.",
+        "operationId": "listarPqrs",
+        "parameters": [
+          {
+            "name": "semaforo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Semaforo"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Semaforo"
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/EstadoPqrs"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Estado"
+            }
+          },
+          {
+            "name": "idArea",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Área sugerida vigente.",
+              "title": "Idarea"
+            },
+            "description": "Área sugerida vigente."
+          },
+          {
+            "name": "tipo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/TipoPqrs"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tipo"
+            }
+          },
+          {
+            "name": "pagina",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Pagina"
+            }
+          },
+          {
+            "name": "tamano",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Tamano"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de PQRS ordenadas por vencimiento.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginaPqrs"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos faltantes o con formato inválido.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problema"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pqrs/{id}": {
+      "get": {
+        "tags": [
+          "PQRS"
+        ],
+        "summary": "Consultar una PQRS con su clasificación vigente y su vencimiento (HU-04, HU-07)",
+        "description": "Solo se muestra el texto enmascarado.",
+        "operationId": "consultarPqrs",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Id interno de la PQRS.",
+              "title": "Id"
+            },
+            "description": "Id interno de la PQRS."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Detalle de la PQRS con el texto enmascarado.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PqrsDetalle"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos faltantes o con formato inválido.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problema"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La PQRS no existe.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problema"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pqrs/{id}/clasificaciones": {
+      "post": {
+        "tags": [
+          "Clasificación"
+        ],
+        "summary": "Solicitar de nuevo la clasificación con IA (reintento manual)",
+        "description": "Deja la PQRS con estadoIa PENDIENTE para que el trabajador la clasifique en segundo plano. No espera a la IA.",
+        "operationId": "solicitarClasificacionIa",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Id interno de la PQRS.",
+              "title": "Id"
+            },
+            "description": "Id interno de la PQRS."
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Solicitud encolada; la PQRS queda en estado de IA PENDIENTE.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClasificacionSolicitada"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos faltantes o con formato inválido.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problema"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La PQRS no existe.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problema"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "La PQRS ya está PENDIENTE de clasificación o está RESPONDIDA o CERRADA.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problema"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pqrs/{id}/historial": {
+      "get": {
+        "tags": [
+          "Tablero"
+        ],
+        "summary": "Historial completo de una PQRS (HU-13)",
+        "description": "Eventos de auditoría en orden cronológico. Los eventos de una sugerencia de la IA (CLASIFICAR_IA y SUGERENCIA_IA_NO_APLICADA) traen el modelo y la versión de instrucciones; los demás los traen nulos.",
+        "operationId": "consultarHistorial",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Id interno de la PQRS.",
+              "title": "Id"
+            },
+            "description": "Id interno de la PQRS."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Eventos de auditoría de la PQRS.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Historial"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos faltantes o con formato inválido.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problema"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La PQRS no existe.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problema"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/configuracion/terminos": {
+      "get": {
+        "tags": [
+          "Configuración"
+        ],
+        "summary": "Tabla de términos vigente",
+        "operationId": "listarTerminos",
+        "responses": {
+          "200": {
+            "description": "Términos vigentes hoy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TablaTerminos"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "Técnico"
+        ],
+        "summary": "Estado de la API y de la base de datos",
+        "operationId": "salud_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AccionAuditoria": {
+        "type": "string",
+        "enum": [
+          "REGISTRAR",
+          "CLASIFICAR_REGLAS",
+          "CALCULAR_VENCIMIENTO",
+          "CLASIFICAR_IA",
+          "SUGERENCIA_IA_NO_APLICADA",
+          "IA_FALLIDA",
+          "IA_OMITIDA",
+          "REINTENTO_IA"
+        ],
+        "title": "AccionAuditoria",
+        "description": "Acciones de auditoría de la entrega (contexto.md 4.12). La columna no tiene CHECK."
+      },
+      "Canal": {
+        "type": "string",
+        "enum": [
+          "DIME",
+          "CARTA",
+          "CORREO",
+          "WEB",
+          "VERBAL",
+          "BUZON",
+          "APLICATIVO_EPS"
+        ],
+        "title": "Canal",
+        "description": "Medio por el que llegó la PQRS."
+      },
+      "ClasificacionResumen": {
+        "properties": {
+          "origen": {
+            "$ref": "#/components/schemas/OrigenClasificacion"
+          },
+          "tipo": {
+            "$ref": "#/components/schemas/TipoPqrs"
+          },
+          "atributo": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Referencia"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "area": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Referencia"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "nivelRiesgo": {
+            "$ref": "#/components/schemas/NivelRiesgo"
+          },
+          "confianza": {
+            "type": "number",
+            "title": "Confianza"
+          },
+          "resumen": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resumen"
+          },
+          "requiereRevision": {
+            "type": "boolean",
+            "title": "Requiererevision"
+          },
+          "modelo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modelo"
+          },
+          "versionInstrucciones": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Versioninstrucciones"
+          }
+        },
+        "type": "object",
+        "required": [
+          "origen",
+          "tipo",
+          "atributo",
+          "area",
+          "nivelRiesgo",
+          "confianza",
+          "resumen",
+          "requiereRevision",
+          "modelo",
+          "versionInstrucciones"
+        ],
+        "title": "ClasificacionResumen"
+      },
+      "ClasificacionSolicitada": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "estadoIa": {
+            "$ref": "#/components/schemas/EstadoIa"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "estadoIa"
+        ],
+        "title": "ClasificacionSolicitada",
+        "description": "Respuesta 202 del reintento manual: el trabajador la toma en segundo plano.",
+        "examples": [
+          {
+            "estadoIa": "PENDIENTE",
+            "id": 1287
+          }
+        ]
+      },
+      "ErrorCampo": {
+        "properties": {
+          "campo": {
+            "type": "string",
+            "title": "Campo"
+          },
+          "mensaje": {
+            "type": "string",
+            "title": "Mensaje"
+          }
+        },
+        "type": "object",
+        "required": [
+          "campo",
+          "mensaje"
+        ],
+        "title": "ErrorCampo"
+      },
+      "EstadoIa": {
+        "type": "string",
+        "enum": [
+          "PENDIENTE",
+          "COMPLETADA",
+          "FALLIDA",
+          "OMITIDA"
+        ],
+        "title": "EstadoIa",
+        "description": "Estado de la clasificación con IA, que se procesa en segundo plano (ADR-04)."
+      },
+      "EstadoPqrs": {
+        "type": "string",
+        "enum": [
+          "REGISTRADA",
+          "REQUIERE_REVISION",
+          "CLASIFICADA",
+          "ASIGNADA",
+          "EN_RESPUESTA",
+          "RESPONDIDA",
+          "CERRADA"
+        ],
+        "title": "EstadoPqrs",
+        "description": "Estado de gestión de la PQRS."
+      },
+      "EventoHistorial": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "fecha": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fecha"
+          },
+          "origen": {
+            "$ref": "#/components/schemas/OrigenEvento"
+          },
+          "accion": {
+            "$ref": "#/components/schemas/AccionAuditoria"
+          },
+          "idUsuario": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idusuario"
+          },
+          "campo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Campo"
+          },
+          "valorAnterior": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valoranterior"
+          },
+          "valorNuevo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valornuevo"
+          },
+          "motivo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Motivo"
+          },
+          "modelo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modelo",
+            "description": "Solo en los eventos de una sugerencia de la IA."
+          },
+          "versionInstrucciones": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Versioninstrucciones",
+            "description": "Solo en los eventos de una sugerencia de la IA."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "fecha",
+          "origen",
+          "accion",
+          "idUsuario",
+          "campo",
+          "valorAnterior",
+          "valorNuevo",
+          "motivo"
+        ],
+        "title": "EventoHistorial"
+      },
+      "Historial": {
+        "properties": {
+          "eventos": {
+            "items": {
+              "$ref": "#/components/schemas/EventoHistorial"
+            },
+            "type": "array",
+            "title": "Eventos"
+          }
+        },
+        "type": "object",
+        "required": [
+          "eventos"
+        ],
+        "title": "Historial"
+      },
+      "NivelRiesgo": {
+        "type": "string",
+        "enum": [
+          "NO_APLICA",
+          "SIMPLE",
+          "PRIORIZADO",
+          "VITAL"
+        ],
+        "title": "NivelRiesgo",
+        "description": "Nivel de riesgo, declarado de menor a mayor gravedad.\n\nLa comparación de gravedad la hará la regla PoliticaDeRiesgo, no este tipo."
+      },
+      "OrigenClasificacion": {
+        "type": "string",
+        "enum": [
+          "REGLAS",
+          "IA",
+          "PERSONA"
+        ],
+        "title": "OrigenClasificacion",
+        "description": "Quién produjo una clasificación."
+      },
+      "OrigenEvento": {
+        "type": "string",
+        "enum": [
+          "PERSONA",
+          "IA",
+          "SISTEMA"
+        ],
+        "title": "OrigenEvento",
+        "description": "Quién produjo un evento de auditoría."
+      },
+      "PaginaPqrs": {
+        "properties": {
+          "pagina": {
+            "type": "integer",
+            "title": "Pagina"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "elementos": {
+            "items": {
+              "$ref": "#/components/schemas/PqrsResumen"
+            },
+            "type": "array",
+            "title": "Elementos"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pagina",
+          "total",
+          "elementos"
+        ],
+        "title": "PaginaPqrs"
+      },
+      "Peticionario": {
+        "properties": {
+          "tipoDocumento": {
+            "$ref": "#/components/schemas/TipoDocumento"
+          },
+          "numeroDocumento": {
+            "type": "string",
+            "maxLength": 20,
+            "minLength": 1,
+            "title": "Numerodocumento"
+          },
+          "nombre": {
+            "type": "string",
+            "maxLength": 150,
+            "minLength": 1,
+            "title": "Nombre"
+          },
+          "telefono": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telefono"
+          },
+          "correo": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9._%+\\-]+@[A-Za-z0-9\\-]+(\\.[A-Za-z0-9\\-]+)*\\.[A-Za-z]{2,}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correo"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tipoDocumento",
+          "numeroDocumento",
+          "nombre"
+        ],
+        "title": "Peticionario"
+      },
+      "Poblacion": {
+        "type": "string",
+        "enum": [
+          "TODAS",
+          "MENOR"
+        ],
+        "title": "Poblacion",
+        "description": "Población a la que aplica un término. MENOR solo con riesgo VITAL (contexto.md 4.6)."
+      },
+      "PqrsCreada": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "radicado": {
+            "type": "string",
+            "title": "Radicado"
+          },
+          "estado": {
+            "$ref": "#/components/schemas/EstadoPqrs"
+          },
+          "estadoIa": {
+            "$ref": "#/components/schemas/EstadoIa"
+          },
+          "clasificacionProvisional": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ClasificacionResumen"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "vencimiento": {
+            "$ref": "#/components/schemas/Vencimiento"
+          },
+          "posiblesDuplicados": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Posiblesduplicados",
+            "description": "La detección de duplicados no está en esta entrega."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "radicado",
+          "estado",
+          "estadoIa",
+          "clasificacionProvisional",
+          "vencimiento"
+        ],
+        "title": "PqrsCreada",
+        "examples": [
+          {
+            "clasificacionProvisional": {
+              "area": {
+                "id": 4,
+                "nombre": "Autorizaciones"
+              },
+              "confianza": 0.5,
+              "nivelRiesgo": "SIMPLE",
+              "origen": "REGLAS",
+              "requiereRevision": false,
+              "tipo": "RECLAMO"
+            },
+            "estado": "REGISTRADA",
+            "estadoIa": "PENDIENTE",
+            "id": 1287,
+            "posiblesDuplicados": [],
+            "radicado": "RAD-2026-001287",
+            "vencimiento": {
+              "fecha": "2026-11-02T16:00:00-05:00",
+              "horasRestantes": 70.0,
+              "regla": "Reclamo en salud, riesgo simple: 72 horas corridas",
+              "semaforo": "VERDE"
+            }
+          }
+        ]
+      },
+      "PqrsDetalle": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "radicado": {
+            "type": "string",
+            "title": "Radicado"
+          },
+          "canal": {
+            "$ref": "#/components/schemas/Canal"
+          },
+          "sede": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sede"
+          },
+          "fechaRadicacion": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Fecharadicacion"
+          },
+          "textoEnmascarado": {
+            "type": "string",
+            "title": "Textoenmascarado"
+          },
+          "estado": {
+            "$ref": "#/components/schemas/EstadoPqrs"
+          },
+          "estadoIa": {
+            "$ref": "#/components/schemas/EstadoIa"
+          },
+          "clasificacion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ClasificacionResumen"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "vencimiento": {
+            "$ref": "#/components/schemas/Vencimiento"
+          },
+          "responsable": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Referencia"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "posiblesDuplicados": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Posiblesduplicados"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "radicado",
+          "canal",
+          "sede",
+          "fechaRadicacion",
+          "textoEnmascarado",
+          "estado",
+          "estadoIa",
+          "clasificacion",
+          "vencimiento",
+          "responsable"
+        ],
+        "title": "PqrsDetalle"
+      },
+      "PqrsNueva": {
+        "properties": {
+          "canal": {
+            "$ref": "#/components/schemas/Canal"
+          },
+          "sede": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 60
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sede"
+          },
+          "fechaRadicacion": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Fecharadicacion"
+          },
+          "texto": {
+            "type": "string",
+            "maxLength": 10000,
+            "minLength": 10,
+            "title": "Texto"
+          },
+          "pacienteMenorDeEdad": {
+            "type": "boolean",
+            "title": "Pacientemenordeedad",
+            "default": false
+          },
+          "peticionario": {
+            "$ref": "#/components/schemas/Peticionario"
+          }
+        },
+        "type": "object",
+        "required": [
+          "canal",
+          "fechaRadicacion",
+          "texto",
+          "peticionario"
+        ],
+        "title": "PqrsNueva",
+        "examples": [
+          {
+            "canal": "DIME",
+            "fechaRadicacion": "2026-10-30T16:00:00-05:00",
+            "pacienteMenorDeEdad": false,
+            "peticionario": {
+              "correo": "usuario1@ejemplo.com",
+              "nombre": "Usuario Sintético Uno",
+              "numeroDocumento": "1000000001",
+              "telefono": "3000000000",
+              "tipoDocumento": "CC"
+            },
+            "sede": "Sede clínica",
+            "texto": "Desde hace tres semanas me ordenaron una resonancia y no me han dado la autorización. Llamé dos veces y nadie responde. Mi teléfono es 3000000000."
+          }
+        ]
+      },
+      "PqrsResumen": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "radicado": {
+            "type": "string",
+            "title": "Radicado"
+          },
+          "tipo": {
+            "$ref": "#/components/schemas/TipoPqrs"
+          },
+          "nivelRiesgo": {
+            "$ref": "#/components/schemas/NivelRiesgo"
+          },
+          "area": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Referencia"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Área sugerida de la clasificación vigente."
+          },
+          "estado": {
+            "$ref": "#/components/schemas/EstadoPqrs"
+          },
+          "vencimiento": {
+            "$ref": "#/components/schemas/Vencimiento"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "radicado",
+          "tipo",
+          "nivelRiesgo",
+          "area",
+          "estado",
+          "vencimiento"
+        ],
+        "title": "PqrsResumen"
+      },
+      "Problema": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "status": {
+            "type": "integer",
+            "title": "Status"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          },
+          "instance": {
+            "type": "string",
+            "title": "Instance"
+          },
+          "errores": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ErrorCampo"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Errores"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "title",
+          "status",
+          "detail",
+          "instance"
+        ],
+        "title": "Problema",
+        "description": "Problem Details (RFC 9457)."
+      },
+      "Referencia": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nombre"
+        ],
+        "title": "Referencia"
+      },
+      "Regimen": {
+        "type": "string",
+        "enum": [
+          "GENERAL",
+          "SALUD"
+        ],
+        "title": "Regimen",
+        "description": "Régimen normativo de un término legal."
+      },
+      "Semaforo": {
+        "type": "string",
+        "enum": [
+          "VERDE",
+          "AMARILLO",
+          "ROJO"
+        ],
+        "title": "Semaforo",
+        "description": "Color de la bandeja según la fracción del plazo que queda (contexto.md 4.7)."
+      },
+      "TablaTerminos": {
+        "properties": {
+          "terminos": {
+            "items": {
+              "$ref": "#/components/schemas/TerminoLegal"
+            },
+            "type": "array",
+            "title": "Terminos"
+          }
+        },
+        "type": "object",
+        "required": [
+          "terminos"
+        ],
+        "title": "TablaTerminos"
+      },
+      "TerminoLegal": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "regimen": {
+            "$ref": "#/components/schemas/Regimen"
+          },
+          "tipo": {
+            "$ref": "#/components/schemas/TipoPqrs"
+          },
+          "nivelRiesgo": {
+            "$ref": "#/components/schemas/NivelRiesgo"
+          },
+          "poblacion": {
+            "$ref": "#/components/schemas/Poblacion"
+          },
+          "valor": {
+            "type": "integer",
+            "title": "Valor"
+          },
+          "unidad": {
+            "$ref": "#/components/schemas/Unidad"
+          },
+          "idCalendario": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idcalendario"
+          },
+          "fuenteNormativa": {
+            "type": "string",
+            "title": "Fuentenormativa"
+          },
+          "vigenteDesde": {
+            "type": "string",
+            "format": "date",
+            "title": "Vigentedesde"
+          },
+          "vigenteHasta": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vigentehasta"
+          },
+          "regla": {
+            "type": "string",
+            "title": "Regla"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "regimen",
+          "tipo",
+          "nivelRiesgo",
+          "poblacion",
+          "valor",
+          "unidad",
+          "idCalendario",
+          "fuenteNormativa",
+          "vigenteDesde",
+          "vigenteHasta",
+          "regla"
+        ],
+        "title": "TerminoLegal"
+      },
+      "TipoDocumento": {
+        "type": "string",
+        "enum": [
+          "CC",
+          "TI",
+          "CE",
+          "PA",
+          "RC",
+          "PPT"
+        ],
+        "title": "TipoDocumento",
+        "description": "Tipo de documento del peticionario, según el contrato de la API."
+      },
+      "TipoPqrs": {
+        "type": "string",
+        "enum": [
+          "PETICION",
+          "QUEJA",
+          "RECLAMO",
+          "SUGERENCIA",
+          "SOLICITUD_INFORMACION",
+          "CONSULTA"
+        ],
+        "title": "TipoPqrs",
+        "description": "Tipo de PQRS. SOLICITUD_INFORMACION tiene 21 caracteres: por eso las columnas son VARCHAR(25)."
+      },
+      "Unidad": {
+        "type": "string",
+        "enum": [
+          "DIAS_HABILES",
+          "HORAS_CORRIDAS"
+        ],
+        "title": "Unidad",
+        "description": "Unidad en que se cuenta un término legal."
+      },
+      "Vencimiento": {
+        "properties": {
+          "fecha": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Fecha"
+          },
+          "regla": {
+            "type": "string",
+            "title": "Regla"
+          },
+          "semaforo": {
+            "$ref": "#/components/schemas/Semaforo"
+          },
+          "horasRestantes": {
+            "type": "number",
+            "title": "Horasrestantes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "fecha",
+          "regla",
+          "semaforo",
+          "horasRestantes"
+        ],
+        "title": "Vencimiento"
+      }
+    }
+  }
+}

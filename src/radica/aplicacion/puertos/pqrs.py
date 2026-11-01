@@ -2,7 +2,9 @@
 
 Frente a la sección 5.3 agrega reservar_id (nextval, para armar el radicado
 antes de insertar), obtener_o_crear_peticionario, guardar_clasificacion y
-existe. pendientes_de_ia queda para la sesión del trabajador.
+existe. La sesión 4 agrega lo que necesitan ClasificarPqrs y el reintento:
+pendientes_de_ia, obtener_para_clasificar, retirar_clasificacion_vigente,
+actualizar_clasificacion, actualizar_estado y marcar_pendiente.
 """
 
 from dataclasses import dataclass
@@ -65,6 +67,28 @@ class FiltroBandeja:
     id_area: int | None = None  # área sugerida de la clasificación vigente
 
 
+@dataclass(frozen=True)
+class PqrsParaClasificar:
+    """Lo que ClasificarPqrs necesita de una PQRS: su plazo vigente y los datos para verificar.
+
+    tipo, id_atributo y nivel_riesgo son los de pqrs; id_area es el área
+    sugerida de la clasificación vigente (pqrs.id_area sigue nulo, PB-13).
+    """
+
+    id: int
+    fecha_radicacion: datetime
+    texto_enmascarado: str
+    paciente_menor: bool
+    tipo: TipoPqrs
+    id_atributo: int | None
+    id_area: int | None
+    nivel_riesgo: NivelRiesgo
+    fecha_vencimiento: datetime
+    estado: EstadoPqrs
+    estado_ia: EstadoIa
+    peticionario: PeticionarioCifrado
+
+
 class PqrsRepository(Protocol):
     def reservar_id(self) -> int:
         """Siguiente id de pqrs (nextval). Si el registro falla, el número se pierde."""
@@ -85,3 +109,33 @@ class PqrsRepository(Protocol):
         ...
 
     def existe(self, id_pqrs: int) -> bool: ...
+
+    def pendientes_de_ia(self, limite: int = 1) -> list[int]:
+        """Ids de las PQRS con estado_ia PENDIENTE, de la más antigua a la más nueva.
+
+        Las deja bloqueadas hasta el fin de la transacción y salta las que otro
+        trabajador ya tomó (SELECT … FOR UPDATE SKIP LOCKED).
+        """
+        ...
+
+    def obtener_para_clasificar(self, id_pqrs: int) -> PqrsParaClasificar | None: ...
+
+    def retirar_clasificacion_vigente(self, id_pqrs: int) -> None:
+        """La clasificación vigente pasa a vigente = false (solo puede haber una vigente)."""
+        ...
+
+    def actualizar_clasificacion(
+        self,
+        id_pqrs: int,
+        tipo: TipoPqrs,
+        id_atributo: int | None,
+        nivel_riesgo: NivelRiesgo,
+        id_termino: int,
+        fecha_vencimiento: datetime,
+    ) -> None: ...
+
+    def actualizar_estado(self, id_pqrs: int, estado: EstadoPqrs, estado_ia: EstadoIa) -> None: ...
+
+    def marcar_pendiente(self, id_pqrs: int, estado_ia_actual: EstadoIa) -> bool:
+        """Pone estado_ia = PENDIENTE solo si sigue en estado_ia_actual; False si otro lo cambió antes."""
+        ...

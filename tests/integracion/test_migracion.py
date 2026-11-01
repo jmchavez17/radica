@@ -27,6 +27,7 @@ from radica.dominio.valores import (
     OrigenEvento,
     Poblacion,
     Regimen,
+    ResultadoLlamadaIA,
     TipoPqrs,
     Unidad,
 )
@@ -75,6 +76,7 @@ CHECKS_DEL_DOMINIO: dict[str, type[StrEnum]] = {
     "ck_termino_legal_regimen": Regimen,
     "ck_termino_legal_poblacion": Poblacion,
     "ck_termino_legal_unidad": Unidad,
+    "ck_llamada_ia_resultado": ResultadoLlamadaIA,
 }
 
 

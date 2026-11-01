@@ -1,8 +1,26 @@
-# Por ahora solo la base de datos; la API y el trabajador se agregan después.
-# Las credenciales se leen del archivo .env (ver .env.example).
+# Servicios db, api y trabajador (contexto.md 2.2). La API y el trabajador usan la
+# misma imagen (Dockerfile) con comandos distintos.
+# Las credenciales y llaves se leen del archivo .env (ver .env.example). Una variable
+# definida en la consola manda sobre la del .env, por ejemplo:
+#   $env:IA_PROVIDER = "ninguno"; docker compose up -d
 # Para validar este archivo usar `docker compose config --quiet`:
 # sin --quiet, Compose imprime los valores leídos del .env.
 name: radica
+
+# Entorno común de api y trabajador. Dentro de la red de Compose la base es db:5432,
+# no el 127.0.0.1:5433 que usa el equipo anfitrión.
+x-entorno-radica: &entorno-radica
+  RADICA_DB_URL: postgresql+psycopg://${POSTGRES_USER:?Falta POSTGRES_USER en .env}:${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD en .env}@db:5432/${POSTGRES_DB:?Falta POSTGRES_DB en .env}
+  RADICA_LLAVE_CIFRADO: ${RADICA_LLAVE_CIFRADO:?Falta RADICA_LLAVE_CIFRADO en .env}
+  RADICA_LLAVE_HMAC: ${RADICA_LLAVE_HMAC:?Falta RADICA_LLAVE_HMAC en .env}
+  RADICA_UMBRAL_AMARILLO: ${RADICA_UMBRAL_AMARILLO:-0.5}
+  RADICA_UMBRAL_CONFIANZA: ${RADICA_UMBRAL_CONFIANZA:-0.75}
+  IA_PROVIDER: ${IA_PROVIDER:-ninguno}
+  IA_MODEL: ${IA_MODEL:-claude-haiku-5-5}
+  IA_API_KEY: ${IA_API_KEY:-}
+  IA_TIMEOUT_S: ${IA_TIMEOUT_S:-15}
+  IA_PRECIO_ENTRADA_USD_MTOK: ${IA_PRECIO_ENTRADA_USD_MTOK:-0.10}
+  IA_PRECIO_SALIDA_USD_MTOK: ${IA_PRECIO_SALIDA_USD_MTOK:-0.50}
 
 services:
   db:
@@ -22,6 +40,34 @@ services:
       timeout: 5s
       retries: 10
       start_period: 10s
+
+  api:
+    build: .
+    image: radica:0.1.0
+    environment: *entorno-radica
+    # Migra antes de servir; el trabajador espera a que la API esté sana.
+    command: ["sh", "-c", "alembic upgrade head && exec uvicorn --factory radica.main:crear_aplicacion --host 0.0.0.0 --port 8000"]
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+
+  trabajador:
+    build: .  # la misma imagen que api; la segunda construcción sale de la caché
+    image: radica:0.1.0
+    environment: *entorno-radica
+    command: ["radica-trabajador"]
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   datos_postgres:

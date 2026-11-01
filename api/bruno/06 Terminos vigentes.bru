@@ -1,0 +1,15 @@
+meta {
+  name: Términos vigentes
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/v1/configuracion/terminos
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}

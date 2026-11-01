@@ -21,6 +21,7 @@ dependencies = [
     "cryptography==50.0.2",
     "tzdata==2026.6",
     "uvicorn==0.54.0",
+    "anthropic==2.3.0",
 ]
 
 [project.optional-dependencies]
@@ -29,11 +30,15 @@ dev = [
     "httpx==0.28.1",
 ]
 
+[project.scripts]
+radica-trabajador = "radica.main:ejecutar_trabajador"
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
 "radica.adaptadores.salida.palabras_clave" = ["diccionario.json"]
+"radica.adaptadores.salida.ia" = ["instrucciones/*.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

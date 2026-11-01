@@ -277,10 +277,10 @@ class EventoHistorial(_Esquema):
     valor_nuevo: str | None
     motivo: str | None
     modelo: str | None = Field(
-        default=None, description="Solo en eventos de IA; la tabla auditoria aún no lo guarda."
+        default=None, description="Solo en los eventos de una sugerencia de la IA."
     )
     version_instrucciones: str | None = Field(
-        default=None, description="Solo en eventos de IA; la tabla auditoria aún no lo guarda."
+        default=None, description="Solo en los eventos de una sugerencia de la IA."
     )
 
     @classmethod
@@ -295,11 +295,22 @@ class EventoHistorial(_Esquema):
             valor_anterior=evento.valor_anterior,
             valor_nuevo=evento.valor_nuevo,
             motivo=evento.motivo,
+            modelo=evento.modelo,
+            version_instrucciones=evento.version_instrucciones,
         )
 
 
 class Historial(_Esquema):
     eventos: list[EventoHistorial]
+
+
+class ClasificacionSolicitada(_Esquema):
+    """Respuesta 202 del reintento manual: el trabajador la toma en segundo plano."""
+
+    model_config = ConfigDict(json_schema_extra={"examples": [{"id": 1287, "estadoIa": "PENDIENTE"}]})
+
+    id: int
+    estado_ia: EstadoIa
 
 
 class TerminoLegal(_Esquema):

@@ -1,0 +1,24 @@
+meta {
+  name: Bandeja
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/v1/pqrs?pagina=1&tamano=20
+  body: none
+  auth: none
+}
+
+params:query {
+  pagina: 1
+  tamano: 20
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  HU-08. Filtros opcionales: semaforo, estado, tipo e idArea. Las vencidas salen primero.
+}

@@ -1,0 +1,19 @@
+meta {
+  name: Salud
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/health
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  Ruta técnica para Docker: comprueba la conexión a la base de datos. No está en el contrato.
+}

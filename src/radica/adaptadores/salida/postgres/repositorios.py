@@ -8,13 +8,18 @@ así que todo un registro se confirma o se deshace junto.
 
 import json
 from collections.abc import Mapping
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 
 from sqlalchemy import Connection, Engine, create_engine, text
 
-from radica.aplicacion.puertos.clasificador import AreaCatalogo, AtributoCatalogo, Catalogo
-from radica.aplicacion.puertos.pqrs import ClasificacionVigente, FiltroBandeja, VistaPqrs
+from radica.aplicacion.puertos.clasificador import AreaCatalogo, AtributoCatalogo, Catalogo, UsoIA
+from radica.aplicacion.puertos.pqrs import (
+    ClasificacionVigente,
+    FiltroBandeja,
+    PqrsParaClasificar,
+    VistaPqrs,
+)
 from radica.dominio.plazos import ZONA_COLOMBIA, Termino
 from radica.dominio.pqrs import Clasificacion, EventoAuditoria, PeticionarioCifrado, Pqrs, Referencia
 from radica.dominio.valores import (
@@ -237,6 +242,104 @@ class PqrsRepositoryPostgres:
             is not None
         )
 
+    def pendientes_de_ia(self, limite: int = 1) -> list[int]:
+        return list(
+            self._conexion.execute(
+                text(
+                    "SELECT id_pqrs FROM pqrs WHERE estado_ia = 'PENDIENTE'"
+                    " ORDER BY fecha_creacion, id_pqrs LIMIT :limite FOR UPDATE SKIP LOCKED"
+                ),
+                {"limite": limite},
+            ).scalars()
+        )
+
+    def obtener_para_clasificar(self, id_pqrs: int) -> PqrsParaClasificar | None:
+        fila = (
+            self._conexion.execute(
+                text(
+                    "SELECT p.id_pqrs, p.fecha_radicacion, p.texto_enmascarado, p.paciente_menor,"
+                    " p.tipo, p.id_atributo, p.nivel_riesgo, p.fecha_vencimiento, p.estado,"
+                    " p.estado_ia, c.id_area, pe.documento_hash, pe.nombre_cifrado, pe.contacto_cifrado"
+                    " FROM pqrs p"
+                    " JOIN peticionario pe ON pe.id_peticionario = p.id_peticionario"
+                    " LEFT JOIN clasificacion c ON c.id_pqrs = p.id_pqrs AND c.vigente"
+                    " WHERE p.id_pqrs = :id"
+                ),
+                {"id": id_pqrs},
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if fila is None:
+            return None
+        return PqrsParaClasificar(
+            id=fila["id_pqrs"],
+            fecha_radicacion=fila["fecha_radicacion"].astimezone(ZONA_COLOMBIA),
+            texto_enmascarado=fila["texto_enmascarado"],
+            paciente_menor=fila["paciente_menor"],
+            tipo=TipoPqrs(fila["tipo"]),
+            id_atributo=fila["id_atributo"],
+            id_area=fila["id_area"],
+            nivel_riesgo=NivelRiesgo(fila["nivel_riesgo"]),
+            fecha_vencimiento=fila["fecha_vencimiento"].astimezone(ZONA_COLOMBIA),
+            estado=EstadoPqrs(fila["estado"]),
+            estado_ia=EstadoIa(fila["estado_ia"]),
+            peticionario=PeticionarioCifrado(
+                documento_hash=fila["documento_hash"],
+                nombre_cifrado=bytes(fila["nombre_cifrado"]),
+                contacto_cifrado=bytes(fila["contacto_cifrado"]),
+            ),
+        )
+
+    def retirar_clasificacion_vigente(self, id_pqrs: int) -> None:
+        self._conexion.execute(
+            text("UPDATE clasificacion SET vigente = false WHERE id_pqrs = :id AND vigente"),
+            {"id": id_pqrs},
+        )
+
+    def actualizar_clasificacion(
+        self,
+        id_pqrs: int,
+        tipo: TipoPqrs,
+        id_atributo: int | None,
+        nivel_riesgo: NivelRiesgo,
+        id_termino: int,
+        fecha_vencimiento: datetime,
+    ) -> None:
+        self._conexion.execute(
+            text(
+                "UPDATE pqrs SET tipo = :tipo, id_atributo = :id_atributo, nivel_riesgo = :nivel,"
+                " id_termino = :id_termino, fecha_vencimiento = :vencimiento WHERE id_pqrs = :id"
+            ),
+            {
+                "id": id_pqrs,
+                "tipo": tipo.value,
+                "id_atributo": id_atributo,
+                "nivel": nivel_riesgo.value,
+                "id_termino": id_termino,
+                "vencimiento": fecha_vencimiento,
+            },
+        )
+
+    def actualizar_estado(self, id_pqrs: int, estado: EstadoPqrs, estado_ia: EstadoIa) -> None:
+        self._conexion.execute(
+            text("UPDATE pqrs SET estado = :estado, estado_ia = :estado_ia WHERE id_pqrs = :id"),
+            {"id": id_pqrs, "estado": estado.value, "estado_ia": estado_ia.value},
+        )
+
+    def marcar_pendiente(self, id_pqrs: int, estado_ia_actual: EstadoIa) -> bool:
+        """Comparar y cambiar: si dos reintentos llegan a la vez, el segundo encuentra PENDIENTE."""
+        return (
+            self._conexion.execute(
+                text(
+                    "UPDATE pqrs SET estado_ia = 'PENDIENTE'"
+                    " WHERE id_pqrs = :id AND estado_ia = :actual RETURNING id_pqrs"
+                ),
+                {"id": id_pqrs, "actual": estado_ia_actual.value},
+            ).scalar_one_or_none()
+            is not None
+        )
+
 
 class AuditoriaRepositoryPostgres:
     def __init__(self, conexion: Connection) -> None:
@@ -262,11 +365,24 @@ class AuditoriaRepositoryPostgres:
         )
 
     def historial(self, id_pqrs: int) -> list[EventoAuditoria]:
+        """Modelo y versión de un evento de sugerencia salen de la llamada OK de su transacción.
+
+        Decisión D3 (sin columnas nuevas): ClasificarPqrs inserta la llamada y
+        los eventos en la misma transacción, y las dos fechas son now(), así que
+        coinciden exactamente.
+        """
         filas = self._conexion.execute(
             text(
-                "SELECT id_evento, id_pqrs, id_usuario, origen, accion, campo, valor_anterior,"
-                " valor_nuevo, motivo, fecha FROM auditoria WHERE id_pqrs = :id"
-                " ORDER BY fecha, id_evento"
+                "SELECT a.id_evento, a.id_pqrs, a.id_usuario, a.origen, a.accion, a.campo,"
+                " a.valor_anterior, a.valor_nuevo, a.motivo, a.fecha, l.modelo, l.version_instrucciones"
+                " FROM auditoria a"
+                " LEFT JOIN LATERAL ("
+                "   SELECT modelo, version_instrucciones FROM llamada_ia"
+                "    WHERE id_pqrs = a.id_pqrs AND fecha = a.fecha AND resultado = 'OK'"
+                "      AND operacion = 'CLASIFICAR'"
+                "    ORDER BY id_llamada DESC LIMIT 1"
+                " ) l ON a.accion IN ('CLASIFICAR_IA', 'SUGERENCIA_IA_NO_APLICADA')"
+                " WHERE a.id_pqrs = :id ORDER BY a.fecha, a.id_evento"
             ),
             {"id": id_pqrs},
         ).mappings()
@@ -282,9 +398,34 @@ class AuditoriaRepositoryPostgres:
                 motivo=fila["motivo"],
                 id_evento=fila["id_evento"],
                 fecha=fila["fecha"].astimezone(ZONA_COLOMBIA),
+                modelo=fila["modelo"],
+                version_instrucciones=fila["version_instrucciones"],
             )
             for fila in filas
         ]
+
+    def registrar_llamada_ia(self, id_pqrs: int, uso: UsoIA, version_instrucciones: str) -> int:
+        """Solo metadatos: la tabla no tiene columnas para el texto enviado ni la respuesta."""
+        return self._conexion.execute(
+            text(
+                "INSERT INTO llamada_ia (id_pqrs, operacion, proveedor, modelo, version_instrucciones,"
+                " intento, resultado, tokens_entrada, tokens_salida, costo_usd, latencia_ms)"
+                " VALUES (:id_pqrs, 'CLASIFICAR', :proveedor, :modelo, :version, :intento, :resultado,"
+                " :tokens_entrada, :tokens_salida, :costo, :latencia) RETURNING id_llamada"
+            ),
+            {
+                "id_pqrs": id_pqrs,
+                "proveedor": uso.proveedor,
+                "modelo": uso.modelo,
+                "version": version_instrucciones,
+                "intento": uso.intento,
+                "resultado": uso.resultado.value,
+                "tokens_entrada": uso.tokens_entrada,
+                "tokens_salida": uso.tokens_salida,
+                "costo": uso.costo_usd,
+                "latencia": uso.latencia_ms,
+            },
+        ).scalar_one()
 
 
 class ConfiguracionRepositoryPostgres:

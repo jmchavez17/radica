@@ -23,3 +23,11 @@ class PqrsNoEncontrada(Exception):
     def __init__(self, id_pqrs: int) -> None:
         super().__init__(f"No existe la PQRS {id_pqrs}")
         self.id_pqrs = id_pqrs
+
+
+class OperacionNoPermitida(Exception):
+    """El estado actual de la PQRS no permite la operación (409). detalle va en español para la API."""
+
+    def __init__(self, detalle: str) -> None:
+        super().__init__(detalle)
+        self.detalle = detalle

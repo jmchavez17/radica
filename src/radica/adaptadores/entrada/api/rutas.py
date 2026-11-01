@@ -10,6 +10,7 @@ from fastapi import APIRouter, Path, Query, Response, status
 
 from radica.adaptadores.entrada.api.casos import FabricaDeCasos
 from radica.adaptadores.entrada.api.esquemas import (
+    ClasificacionSolicitada,
     EventoHistorial,
     Historial,
     PaginaPqrs,
@@ -33,6 +34,12 @@ INVALIDA: dict[int | str, dict[str, Any]] = {
 }
 NO_ENCONTRADA: dict[int | str, dict[str, Any]] = {
     404: {"model": Problema, "description": "La PQRS no existe."}
+}
+CONFLICTO: dict[int | str, dict[str, Any]] = {
+    409: {
+        "model": Problema,
+        "description": "La PQRS ya está PENDIENTE de clasificación o está RESPONDIDA o CERRADA.",
+    }
 }
 
 IdPqrs = Annotated[int, Path(ge=1, description="Id interno de la PQRS.")]
@@ -119,14 +126,34 @@ def crear_rutas(fabrica: FabricaDeCasos) -> APIRouter:
             consulta = casos.consultar.ejecutar(id)
         return PqrsDetalle.desde(consulta)
 
+    @rutas.post(
+        "/pqrs/{id}/clasificaciones",
+        tags=["Clasificación"],
+        operation_id="solicitarClasificacionIa",
+        summary="Solicitar de nuevo la clasificación con IA (reintento manual)",
+        description=(
+            "Deja la PQRS con estadoIa PENDIENTE para que el trabajador la clasifique en segundo"
+            " plano. No espera a la IA."
+        ),
+        status_code=status.HTTP_202_ACCEPTED,
+        response_model=ClasificacionSolicitada,
+        response_description="Solicitud encolada; la PQRS queda en estado de IA PENDIENTE.",
+        responses={**INVALIDA, **NO_ENCONTRADA, **CONFLICTO},
+    )
+    def solicitar_clasificacion_ia(id: IdPqrs) -> ClasificacionSolicitada:
+        with fabrica() as casos:
+            estado_ia = casos.solicitar_clasificacion.ejecutar(id)
+        return ClasificacionSolicitada(id=id, estado_ia=estado_ia)
+
     @rutas.get(
         "/pqrs/{id}/historial",
         tags=["Tablero"],
         operation_id="consultarHistorial",
         summary="Historial completo de una PQRS (HU-13)",
         description=(
-            "Eventos de auditoría en orden cronológico. modelo y versionInstrucciones quedan nulos"
-            " hasta que la tabla auditoria los guarde."
+            "Eventos de auditoría en orden cronológico. Los eventos de una sugerencia de la IA"
+            " (CLASIFICAR_IA y SUGERENCIA_IA_NO_APLICADA) traen el modelo y la versión de"
+            " instrucciones; los demás los traen nulos."
         ),
         response_model=Historial,
         response_description="Eventos de auditoría de la PQRS.",

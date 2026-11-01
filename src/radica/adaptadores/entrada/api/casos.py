@@ -11,6 +11,7 @@ from radica.aplicacion.casos_de_uso.consultas import (
     ListarTerminos,
 )
 from radica.aplicacion.casos_de_uso.registrar_pqrs import RegistrarPqrs
+from radica.aplicacion.casos_de_uso.solicitar_clasificacion import SolicitarClasificacion
 
 
 @dataclass(frozen=True)
@@ -20,6 +21,7 @@ class CasosDeUso:
     bandeja: ListarBandeja
     historial: ConsultarHistorial
     terminos: ListarTerminos
+    solicitar_clasificacion: SolicitarClasificacion
 
 
 # Abre una unidad de trabajo: confirma al salir sin error y deshace si hay una excepción.

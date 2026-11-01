@@ -36,7 +36,11 @@ pip install -e ".[dev]"
 docker compose up -d db           # PostgreSQL 16 en 127.0.0.1:5433 (el 5432 lo ocupa un PostgreSQL local)
 alembic upgrade head              # migrar
 pytest                            # probar; sin RADICA_DB_URL las pruebas de integración se omiten
+radica-trabajador                 # trabajador de la IA; con IA_PROVIDER=ninguno no llama a nadie
+docker compose up -d --build      # db, api y trabajador
 ```
+
+Nunca llamar al `python` del sistema (se cuelga): usar siempre el del entorno virtual. Las pruebas no usan la red ni `IA_API_KEY`; el SDK de Anthropic se prueba con un cliente falso (`tests/unitarios/dobles.py`).
 
 Sin activar el entorno: `.venv\Scripts\python -m pytest`, `.venv\Scripts\alembic upgrade head`.
 

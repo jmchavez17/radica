@@ -72,6 +72,7 @@ Los nombres de los esquemas del contrato se conservan: `PqrsNueva`, `PqrsCreada`
 
 - **`datosClave` se guarda, pero no se expone.** Claude devuelve `datosClave` y el trabajador lo guarda en `clasificacion.datos_extraidos` (JSONB). Ni el contrato ni la API lo muestran: `ClasificacionResumen` no tiene ese campo. Exponerlo es PB-09 (#13). Las salidas estructuradas no admiten un diccionario libre, así que viaja como lista de pares nombre y valor y el adaptador lo convierte (sesión 4).
 - **El historial trae modelo y versión.** `EventoHistorial` agrega `idUsuario`, `modelo` y `versionInstrucciones`. La tabla `auditoria` no tiene esas dos columnas: se toman de la llamada OK de `llamada_ia` de la misma transacción, sin migración (sesión 4, D3).
+- **La fecha de los eventos del trabajador es la de inicio de su transacción.** `auditoria.fecha` toma `now()`, que en PostgreSQL es la hora de inicio de la transacción. El trabajador abre la suya al tomar la PQRS, antes de llamar a Claude. En la verificación de la sesión 6, CLASIFICAR_IA quedó con las 14:48:19,99 y la respuesta de Anthropic llegó a las 14:48:21,7. No se cambia: la unión con `llamada_ia` de D3 depende de que las dos fechas coincidan.
 - **`TerminoLegal` agrega `regla` e `idCalendario`.** `regla` es el texto que también sale en `vencimiento.regla`.
 - **`responsable` siempre es `null` y `estado` nunca llega a ASIGNADA.** La asignación es PB-13 (#9). El ejemplo del contrato muestra el responsable 7 y el estado ASIGNADA.
 - **`posiblesDuplicados` siempre es `[]`.** La detección es PB-27 (contexto.md 4.8).

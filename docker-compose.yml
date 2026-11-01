@@ -67,6 +67,15 @@ services:
     depends_on:
       api:
         condition: service_healthy
+    # Sano si su configuración es válida y llega a la base; no comprueba que el bucle
+    # siga vivo: si el proceso muere, el contenedor termina y restart lo vuelve a iniciar.
+    # La salida se descarta para que docker inspect no guarde mensajes de error.
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'from radica.config import cargar; from radica.adaptadores.salida.postgres.repositorios import comprobar_conexion, crear_motor; comprobar_conexion(crear_motor(cargar().url_base_datos))' >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
     restart: unless-stopped
 
 volumes:

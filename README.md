@@ -60,7 +60,7 @@ Versiones fijadas en `pyproject.toml` y en las imágenes de `Dockerfile` y `dock
 | python-dotenv | 1.2.4 | Lee `.env` fuera de Docker |
 | tzdata | 2026.6 | Zona horaria America/Bogota en Windows |
 | pytest | 9.2.0 | Pruebas (dependencia de desarrollo) |
-| httpx | 0.28.1 | Dependencia de desarrollo |
+| httpx2 | 2.16.0 | Cliente del TestClient de Starlette y de las pruebas del SDK de Anthropic (dependencia de desarrollo) |
 | setuptools | 84.2.1 | Construcción del paquete |
 | Docker Compose | Probado con v5.6.1 y Docker Engine 29.9.2 | Servicios `db`, `api` y `trabajador` |
 | Bruno | Aplicación de escritorio | Colección de la API en `api/bruno/` |

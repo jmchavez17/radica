@@ -1,5 +1,6 @@
 # Servicios db, api y trabajador (contexto.md 2.2). La API y el trabajador usan la
-# misma imagen (Dockerfile) con comandos distintos.
+# misma imagen (Dockerfile) con comandos distintos. web es la interfaz (sesión 7):
+# nginx sirve los estáticos y lleva /api/ y /health a la API, en el mismo origen.
 # Las credenciales y llaves se leen del archivo .env (ver .env.example). Una variable
 # definida en la consola manda sobre la del .env, por ejemplo:
 #   $env:IA_PROVIDER = "ninguno"; docker compose up -d
@@ -77,6 +78,32 @@ services:
       retries: 6
       start_period: 10s
     restart: unless-stopped
+
+  web:
+    build:
+      context: ./web
+      # Para la prueba que compara los catálogos de la interfaz con el OpenAPI.
+      additional_contexts:
+        contrato: ./docs/api
+    image: radica-web:0.1.0
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    # nginx sin privilegios (usuario 101): solo escribe en /tmp.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    # Sano si nginx sirve la interfaz; la salud de la API la mide su propio servicio.
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
 
 volumes:
   datos_postgres:

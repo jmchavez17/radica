@@ -17,3 +17,5 @@ docs/
 datos/
 api/
 .claude/
+# La interfaz tiene su propia imagen (web/Dockerfile) y su propio .dockerignore.
+web/

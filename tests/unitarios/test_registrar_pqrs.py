@@ -16,7 +16,13 @@ from radica.aplicacion.casos_de_uso.errores import DatosInvalidos
 from radica.aplicacion.casos_de_uso.registrar_pqrs import RegistrarPqrs, SolicitudRegistro
 from radica.aplicacion.puertos.clasificador import ResultadoClasificacion
 from radica.dominio.peticionario import DatosPeticionario
-from radica.dominio.plazos import ZONA_COLOMBIA, CalculadoraDePlazos, Termino, TerminoNoConfigurado
+from radica.dominio.plazos import (
+    ZONA_COLOMBIA,
+    CalculadoraDePlazos,
+    CalendarioIncompleto,
+    Termino,
+    TerminoNoConfigurado,
+)
 from radica.dominio.pqrs import Referencia, formato_radicado
 from radica.dominio.semaforo import ReglaSemaforo
 from radica.dominio.valores import (
@@ -249,6 +255,20 @@ def test_sin_termino_vigente_falla_sin_guardar(festivos: frozenset[date]) -> Non
     escenario = Escenario((), festivos)
 
     with pytest.raises(TerminoNoConfigurado):
+        escenario.caso.ejecutar(_solicitud())
+
+    assert escenario.pqrs.pqrs == {} and escenario.pqrs.peticionarios == {}
+    assert escenario.auditoria.eventos == []
+
+
+def test_sin_festivos_del_anio_del_conteo_falla_sin_guardar(terminos: tuple[Termino, ...]) -> None:
+    peticion = ResultadoClasificacion(
+        tipo=TipoPqrs.PETICION, id_atributo=None, id_area=None, nivel_riesgo=NivelRiesgo.NO_APLICA,
+        confianza=0.5,
+    )
+    escenario = Escenario(terminos, frozenset({date(2025, 12, 25)}), peticion)
+
+    with pytest.raises(CalendarioIncompleto, match="festivos de 2026"):
         escenario.caso.ejecutar(_solicitud())
 
     assert escenario.pqrs.pqrs == {} and escenario.pqrs.peticionarios == {}

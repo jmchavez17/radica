@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 
 from radica.adaptadores.entrada.api.casos import FabricaDeCasos
 from radica.adaptadores.entrada.api.errores import TIPO_CONTENIDO, problema, registrar_manejadores, registro
+from radica.adaptadores.entrada.api.esquemas import Problema
 from radica.adaptadores.entrada.api.rutas import crear_rutas
 
 DESCRIPCION = """
@@ -71,7 +72,17 @@ def crear_app(fabrica: FabricaDeCasos, comprobar_base: Callable[[], None]) -> Fa
     registrar_manejadores(app)
     app.include_router(crear_rutas(fabrica))
 
-    @app.get("/health", tags=["Técnico"], summary="Estado de la API y de la base de datos")
+    @app.get(
+        "/health",
+        tags=["Técnico"],
+        operation_id="consultarSalud",
+        summary="Estado de la API y de la base de datos",
+        response_description="La API y la base de datos responden.",
+        responses={
+            200: {"content": {"application/json": {"example": {"estado": "ok"}}}},
+            503: {"model": Problema, "description": "La base de datos no responde."},
+        },
+    )
     def salud(request: Request) -> JSONResponse:
         try:
             comprobar_base()

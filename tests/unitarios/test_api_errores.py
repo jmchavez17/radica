@@ -26,7 +26,7 @@ from radica.aplicacion.casos_de_uso.consultas import (
 from radica.aplicacion.casos_de_uso.registrar_pqrs import RegistrarPqrs
 from radica.aplicacion.casos_de_uso.solicitar_clasificacion import SolicitarClasificacion
 from radica.aplicacion.puertos.clasificador import ResultadoClasificacion
-from radica.dominio.plazos import ZONA_COLOMBIA, CalculadoraDePlazos, Termino
+from radica.dominio.plazos import ZONA_COLOMBIA, CalculadoraDePlazos, CalendarioIncompleto, Termino
 from radica.dominio.semaforo import ReglaSemaforo
 from radica.dominio.valores import NivelRiesgo, TipoPqrs
 
@@ -194,6 +194,17 @@ def test_sin_termino_vigente_es_500_de_configuracion(festivos: frozenset[date]) 
     assert "RECLAMO" not in respuesta.text
 
 
+def test_calendario_incompleto_es_500_de_configuracion_sin_detalles(
+    terminos: tuple[Termino, ...], festivos: frozenset[date]
+) -> None:
+    falla = CalendarioIncompleto("El calendario 1 no tiene festivos de 2028; no se puede contar el término 3.")
+    respuesta = _cliente(terminos, festivos, falla=falla).post("/api/v1/pqrs", json=EJEMPLO_REGISTRO)
+
+    assert (respuesta.status_code, respuesta.headers["content-type"]) == (500, PROBLEMA)
+    assert respuesta.json()["type"] == "https://radica.local/problemas/configuracion"
+    assert "2028" not in respuesta.text and "término 3" not in respuesta.text
+
+
 def test_health(terminos: tuple[Termino, ...], festivos: frozenset[date]) -> None:
     assert _cliente(terminos, festivos).get("/health").json() == {"estado": "ok"}
 
@@ -208,7 +219,7 @@ def test_el_openapi_publica_400_y_no_422(cliente: TestClient) -> None:
     operaciones = [op for ruta in esquema["paths"].values() for op in ruta.values()]
     assert all("422" not in op["responses"] for op in operaciones)
     registro = esquema["paths"]["/api/v1/pqrs"]["post"]["responses"]
-    assert set(registro) == {"201", "400"}
+    assert set(registro) == {"201", "400", "500"}
     assert registro["400"]["content"][PROBLEMA]["example"]["status"] == 400
     assert "HTTPValidationError" not in esquema["components"]["schemas"]
     assert {"PqrsNueva", "PqrsCreada", "PqrsDetalle", "Problema"} <= set(esquema["components"]["schemas"])

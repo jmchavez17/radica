@@ -15,7 +15,7 @@ from pydantic.alias_generators import to_camel
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from radica.aplicacion.casos_de_uso.errores import DatosInvalidos, OperacionNoPermitida, PqrsNoEncontrada
-from radica.dominio.plazos import TerminoNoConfigurado
+from radica.dominio.plazos import CalendarioIncompleto, TerminoNoConfigurado
 
 registro = logging.getLogger("radica.api")
 
@@ -144,6 +144,17 @@ async def _termino_no_configurado(request: Request, error: TerminoNoConfigurado)
     )
 
 
+async def _calendario_incompleto(request: Request, error: CalendarioIncompleto) -> JSONResponse:
+    registro.error("Calendario de festivos incompleto en %s: %s", request.url.path, error)
+    return problema(
+        request,
+        500,
+        "configuracion",
+        "Configuración incompleta",
+        "El calendario de festivos no cubre el vencimiento de esta PQRS. Avise al administrador.",
+    )
+
+
 async def _interno(request: Request, error: Exception) -> JSONResponse:
     registro.exception("Error no controlado en %s %s", request.method, request.url.path)
     return problema(request, 500, "interno", "Error interno", "No se pudo completar la solicitud.")
@@ -156,4 +167,5 @@ def registrar_manejadores(app: FastAPI) -> None:
     app.add_exception_handler(OperacionNoPermitida, _conflicto)
     app.add_exception_handler(StarletteHTTPException, _http)
     app.add_exception_handler(TerminoNoConfigurado, _termino_no_configurado)
+    app.add_exception_handler(CalendarioIncompleto, _calendario_incompleto)
     app.add_exception_handler(Exception, _interno)

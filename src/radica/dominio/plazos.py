@@ -29,6 +29,10 @@ class TerminoNoConfigurado(Exception):
     """No hay un único término vigente para la clasificación: es un error de configuración."""
 
 
+class CalendarioIncompleto(Exception):
+    """El conteo en días hábiles pasa por un año sin festivos cargados: es un error de configuración."""
+
+
 @dataclass(frozen=True)
 class Termino:
     """Fila de termino_legal."""
@@ -130,7 +134,9 @@ class CalculadoraDePlazos:
 
     DIAS_HABILES: cuenta desde el día hábil siguiente al de radicación, sin
     importar la hora; son hábiles los lunes a viernes que no son festivo del
-    calendario del término. Vence a las 23:59:59, hora de Colombia.
+    calendario del término. Vence a las 23:59:59, hora de Colombia. Si el conteo
+    pasa por un año sin festivos en el calendario, lanza CalendarioIncompleto en
+    vez de contar sus festivos como hábiles: nunca un plazo inventado.
     HORAS_CORRIDAS: radicación + N horas, sin descontar festivos ni fines de semana.
     """
 
@@ -142,10 +148,16 @@ class CalculadoraDePlazos:
         if termino.unidad is Unidad.HORAS_CORRIDAS:
             limite = fecha_radicacion.astimezone(UTC) + timedelta(hours=termino.valor)
             return limite.astimezone(ZONA_COLOMBIA)
+        anios_con_festivos = {festivo.year for festivo in festivos}
         dia = dia_en_colombia(fecha_radicacion)
         contados = 0
         while contados < termino.valor:
             dia += timedelta(days=1)
+            if dia.year not in anios_con_festivos:
+                raise CalendarioIncompleto(
+                    f"El calendario {termino.id_calendario} no tiene festivos de {dia.year};"
+                    f" no se puede contar el término {termino.id}."
+                )
             if dia.weekday() < 5 and dia not in festivos:
                 contados += 1
         return datetime.combine(dia, CIERRE_DEL_DIA, tzinfo=ZONA_COLOMBIA)

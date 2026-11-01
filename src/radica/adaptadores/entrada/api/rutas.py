@@ -41,6 +41,25 @@ CONFLICTO: dict[int | str, dict[str, Any]] = {
         "description": "La PQRS ya está PENDIENTE de clasificación o está RESPONDIDA o CERRADA.",
     }
 }
+CREADA: dict[int | str, dict[str, Any]] = {
+    201: {
+        "headers": {
+            "Location": {
+                "description": "Ruta del recurso creado.",
+                "schema": {"type": "string", "example": "/api/v1/pqrs/1287"},
+            }
+        }
+    }
+}
+SIN_CONFIGURACION: dict[int | str, dict[str, Any]] = {
+    500: {
+        "model": Problema,
+        "description": (
+            "Falta configuración para calcular el vencimiento (contexto.md 4.6) o hubo un error"
+            " no controlado. Sin detalles internos."
+        ),
+    }
+}
 
 IdPqrs = Annotated[int, Path(ge=1, description="Id interno de la PQRS.")]
 
@@ -61,7 +80,7 @@ def crear_rutas(fabrica: FabricaDeCasos) -> APIRouter:
         status_code=status.HTTP_201_CREATED,
         response_model=PqrsCreada,
         response_description="PQRS registrada.",
-        responses=INVALIDA,
+        responses={**CREADA, **INVALIDA, **SIN_CONFIGURACION},
     )
     def registrar_pqrs(entrada: PqrsNueva, response: Response) -> PqrsCreada:
         peticionario = entrada.peticionario

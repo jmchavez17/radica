@@ -107,7 +107,7 @@ En Docker, la API ejecuta `alembic upgrade head` antes de servir.
 
 ## Levantar la API
 
-`.env` debe tener además `RADICA_LLAVE_CIFRADO` y `RADICA_LLAVE_HMAC`, distintas entre sí; `.env.example` explica cómo generarlas. Sin ellas la API no arranca.
+`.env` debe tener además `RADICA_LLAVE_CIFRADO` y `RADICA_LLAVE_HMAC`, distintas entre sí; `.env.example` explica cómo generarlas. Sin ellas la API no arranca. `RADICA_UMBRAL_AMARILLO` es la fracción de tiempo restante desde la cual el semáforo pasa a amarillo; por defecto 0.5 (contexto.md 4.7).
 
 ```powershell
 docker compose up -d db

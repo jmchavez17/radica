@@ -1,0 +1,42 @@
+meta {
+  name: Registro sin texto ni fecha
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/v1/pqrs
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "canal": "DIME",
+    "peticionario": {
+      "tipoDocumento": "CC",
+      "numeroDocumento": "1000000001",
+      "nombre": "Usuario Sintético Uno"
+    }
+  }
+}
+
+assert {
+  res.status: eq 400
+  res.body.status: eq 400
+}
+
+tests {
+  test("responde en Problem Details", function () {
+    expect(res.getHeader("content-type")).to.include("application/problem+json");
+  });
+
+  test("errores trae los campos texto y fechaRadicacion", function () {
+    const campos = res.body.errores.map((error) => error.campo).sort();
+    expect(campos).to.eql(["fechaRadicacion", "texto"]);
+  });
+}
+
+docs {
+  Contexto 4.11: la validación responde 400, no el 422 de FastAPI.
+}

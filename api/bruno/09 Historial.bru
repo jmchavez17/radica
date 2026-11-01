@@ -1,0 +1,27 @@
+meta {
+  name: Historial
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{baseUrl}}/api/v1/pqrs/{{idPqrs}}/historial
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("trae los eventos del registro", function () {
+    const acciones = res.body.eventos.map((evento) => evento.accion);
+    expect(acciones).to.include.members(["REGISTRAR", "CLASIFICAR_REGLAS", "CALCULAR_VENCIMIENTO"]);
+  });
+}
+
+docs {
+  HU-13. Eventos en orden cronológico; los de una sugerencia de la IA traen modelo y versionInstrucciones.
+  Comprueba que estén los eventos del registro, no la lista exacta: el trabajador agrega los suyos.
+}

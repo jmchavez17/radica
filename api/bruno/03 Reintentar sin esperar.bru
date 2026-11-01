@@ -1,0 +1,27 @@
+meta {
+  name: Reintentar sin esperar
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/v1/pqrs/{{idPqrs}}/clasificaciones
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 409
+  res.body.status: eq 409
+}
+
+tests {
+  test("responde en Problem Details", function () {
+    expect(res.getHeader("content-type")).to.include("application/problem+json");
+  });
+}
+
+docs {
+  Va justo después del registro porque la PQRS sigue PENDIENTE. El trabajador revisa la cola cada 5 s:
+  si pasa justo entre las dos solicitudes, esta responde 202. En ese caso, correr de nuevo la colección.
+}

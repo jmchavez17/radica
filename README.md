@@ -94,7 +94,18 @@ Levanta `db`, `api` (migra antes de servir, en http://127.0.0.1:8000) y `trabaja
 
 ## Colección de Bruno
 
-Abre la carpeta `api/bruno/` en Bruno y elige el entorno `local`. «Registrar una PQRS» guarda el id en `idPqrs` para las demás solicitudes.
+Levanta los servicios sin llamar a Claude. La colección se corre con `IA_PROVIDER=ninguno`:
+
+```powershell
+$env:IA_PROVIDER = "ninguno"; docker compose up -d --build
+```
+
+Abre la carpeta `api/bruno/` en Bruno, elige el entorno `local` y corre la colección completa y en orden. «Registrar una PQRS» guarda `idPqrs` y `radicadoPqrs` para las demás solicitudes; para correr una sola, antes hay que correr esa.
+
+- «Reintentar sin esperar» espera 409 porque la PQRS sigue PENDIENTE. Si el trabajador, que revisa la cola cada 5 s, pasa justo entre el registro y esta solicitud, responde 202: en ese caso, corre de nuevo la colección.
+- «Reintentar la clasificación con IA» espera 7 s antes de enviarse, para que el trabajador ya la haya dejado OMITIDA, y entonces espera 202.
+- «Registrar un reclamo vital» tiene una fecha fija que ya venció: garantiza al menos una PQRS para «Bandeja en rojo».
+- Cada corrida deja 2 PQRS sintéticas más en la base de desarrollo.
 
 ## Estructura
 

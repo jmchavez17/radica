@@ -1,7 +1,7 @@
 meta {
   name: Términos vigentes
   type: http
-  seq: 6
+  seq: 10
 }
 
 get {
@@ -12,4 +12,5 @@ get {
 
 assert {
   res.status: eq 200
+  res.body.terminos.length: eq 9
 }

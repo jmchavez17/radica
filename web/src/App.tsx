@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Registro } from "./Registro";
 
 type Vista = "registro" | "bandeja";
 
@@ -32,7 +33,7 @@ export function App() {
         </nav>
       </header>
       <main>
-        {vista === "registro" ? <p>Registro de PQRS.</p> : <p>Bandeja de PQRS.</p>}
+        {vista === "registro" ? <Registro /> : <p>Bandeja de PQRS.</p>}
       </main>
     </>
   );

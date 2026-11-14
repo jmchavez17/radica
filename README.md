@@ -1,5 +1,7 @@
 # Radica
 
+[![CI](https://github.com/jmchavez17/radica/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/jmchavez17/radica/actions/workflows/ci.yml?query=branch%3Amain)
+
 Asistente de gestión de PQRS (peticiones, quejas, reclamos y sugerencias) para oficinas de atención al usuario que deben responder dentro de términos legales. Proyecto del Diplomado en Ingeniería de Software asistida por Inteligencia Artificial de la Universidad Santiago de Cali, por Jose Miguel Chávez Figueroa e Isabella Castaño Muñoz. Todo el proyecto usa datos sintéticos.
 
 ## Estado actual

@@ -50,7 +50,8 @@ ESPERAS_S = (2.0, 8.0)  # antes del primer y del segundo reintento por error tra
 MAXIMO_RESUMEN = 200
 UN_MILLON = Decimal(1_000_000)
 CENTAVOS_DE_COSTO = Decimal("0.000001")  # llamada_ia.costo_usd es NUMERIC(10,6)
-_ETIQUETA_PQRS = re.compile(r"<\s*/?\s*pqrs\s*>", re.IGNORECASE)
+# Apertura o cierre, con espacios o atributos: <pqrs>, </PQRS >, </pqrs x>, <pqrs id=1/>.
+_ETIQUETA_PQRS = re.compile(r"<\s*/?\s*pqrs\b[^>]*>", re.IGNORECASE)
 
 
 class _DatoClave(BaseModel):

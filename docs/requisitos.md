@@ -36,11 +36,10 @@ Como funcionario de atención, quiero ver el tipo, el área sugerida, su nivel d
 
 - Dada una PQRS registrada, cuando termina la clasificación, entonces se muestran tipo, área, confianza y resumen, marcados como sugerencia de la IA.
 - Dada una sugerencia con confianza menor al umbral configurado, cuando se muestra, entonces la PQRS aparece como «requiere revisión» y no se asigna automáticamente.
-- PROPUESTA: Dado que el proveedor de IA falla, cuando termina la clasificación, entonces sigue vigente la clasificación por reglas y la PQRS aparece como «requiere revisión».
 
 Estado: Pendiente. `GET /api/v1/pqrs/{id}` ya devuelve tipo, área, confianza, resumen y `origen` IA. Falta mostrarlos en la interfaz, que no tiene vista de detalle, y exponer los datos clave (PB-09, #13), que se guardan pero la API no devuelve.
 
-Evidencia: `tests/integracion/test_trabajador.py` (el detalle trae `origen` IA, confianza y resumen), `tests/unitarios/test_clasificar_pqrs.py::test_confianza_0_6_queda_vigente_pero_requiere_revision` y `::test_proveedor_caido_deja_fallida_y_requiere_revision`.
+Evidencia: `tests/integracion/test_trabajador.py` (el detalle trae `origen` IA, confianza y resumen), y `tests/unitarios/test_clasificar_pqrs.py::test_confianza_0_6_queda_vigente_pero_requiere_revision`.
 
 ### HU-05: Detectar el nivel de riesgo en salud (PB-07)
 
@@ -122,3 +121,4 @@ Evidencia: no hay código de aprobación en `src/` ni en `web/src/`, ni una ruta
 | Qué propuso la IA | Qué hicimos | Por qué |
 | --- | --- | --- |
 | Agregar un quinto requisito no funcional, RNF-16 (PROPUESTA): todo cambio que llega a `main` pasa por la integración continua antes de desplegarse | Lo quitamos | El docente pide 4 no funcionales y la integración continua ya tiene su issue (#36) con criterio de hecho |
+| Agregar a HU-04 un tercer criterio (PROPUESTA): si el proveedor de IA falla, sigue vigente la clasificación por reglas y la PQRS pide revisión | Lo quitamos | HU-04 ya tiene un caso negativo (confianza baja) y el de la IA caída ya lo cubre RNF-10 |

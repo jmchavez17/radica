@@ -9,6 +9,8 @@ __pycache__/
 build/
 dist/
 .pytest_cache/
+# Datos de cobertura de pytest-cov (pytest --cov)
+.coverage
 
 # Interfaz web: dependencias y construcción locales
 web/node_modules/

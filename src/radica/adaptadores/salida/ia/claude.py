@@ -50,7 +50,8 @@ ESPERAS_S = (2.0, 8.0)  # antes del primer y del segundo reintento por error tra
 MAXIMO_RESUMEN = 200
 UN_MILLON = Decimal(1_000_000)
 CENTAVOS_DE_COSTO = Decimal("0.000001")  # llamada_ia.costo_usd es NUMERIC(10,6)
-_ETIQUETA_PQRS = re.compile(r"<\s*/?\s*pqrs\s*>", re.IGNORECASE)
+# Apertura o cierre, con espacios o atributos: <pqrs>, </PQRS >, </pqrs x>, <pqrs id=1/>.
+_ETIQUETA_PQRS = re.compile(r"<\s*/?\s*pqrs\b[^>]*>", re.IGNORECASE)
 
 
 class _DatoClave(BaseModel):
@@ -76,11 +77,16 @@ class SalidaClaude(BaseModel):
     datosClave: list[_DatoClave]
 
 
+_NOMBRES = ("properties", "$defs")  # sus llaves son nombres de campos y de tipos, no anotaciones
+
+
 def _sin_notas_internas(esquema: Any) -> Any:
     """Quita títulos y descripciones generados desde el código (docstrings de los enums).
 
-    Las restricciones que el API no admite (mínimo, máximo, longitud) quedan en
-    la descripción que les pone transform_schema, y Pydantic las valida después.
+    Conserva las descripciones que empiezan con «{»: son las restricciones que el API
+    no admite (mínimo, máximo, longitud) y que transform_schema deja escritas ahí,
+    como "{maximum: 1, minimum: 0}"; Pydantic las valida después. Los nombres de
+    campos y de tipos nunca se quitan, aunque se llamen title o description.
     """
     if isinstance(esquema, list):
         return [_sin_notas_internas(parte) for parte in esquema]
@@ -92,7 +98,10 @@ def _sin_notas_internas(esquema: Any) -> Any:
             continue
         if llave == "description" and not str(valor).startswith("{"):
             continue
-        limpio[llave] = valor if llave in ("enum", "required") else _sin_notas_internas(valor)
+        if llave in _NOMBRES:
+            limpio[llave] = {nombre: _sin_notas_internas(parte) for nombre, parte in valor.items()}
+        else:
+            limpio[llave] = valor if llave in ("enum", "required") else _sin_notas_internas(valor)
     return limpio
 
 

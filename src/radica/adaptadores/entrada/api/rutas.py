@@ -22,9 +22,7 @@ from radica.adaptadores.entrada.api.esquemas import (
     TablaTerminos,
     TerminoLegal,
 )
-from radica.aplicacion.casos_de_uso.registrar_pqrs import SolicitudRegistro
 from radica.aplicacion.puertos.pqrs import FiltroBandeja
-from radica.dominio.peticionario import DatosPeticionario
 from radica.dominio.valores import EstadoPqrs, Semaforo, TipoPqrs
 
 PREFIJO = "/api/v1"
@@ -83,23 +81,8 @@ def crear_rutas(fabrica: FabricaDeCasos) -> APIRouter:
         responses={**CREADA, **INVALIDA, **SIN_CONFIGURACION},
     )
     def registrar_pqrs(entrada: PqrsNueva, response: Response) -> PqrsCreada:
-        peticionario = entrada.peticionario
-        solicitud = SolicitudRegistro(
-            canal=entrada.canal,
-            sede=entrada.sede,
-            fecha_radicacion=entrada.fecha_radicacion,
-            texto=entrada.texto,
-            paciente_menor=entrada.paciente_menor_de_edad,
-            peticionario=DatosPeticionario(
-                tipo_documento=peticionario.tipo_documento,
-                numero_documento=peticionario.numero_documento,
-                nombre=peticionario.nombre,
-                telefono=peticionario.telefono,
-                correo=peticionario.correo,
-            ),
-        )
         with fabrica() as casos:
-            registrada = casos.registrar.ejecutar(solicitud)
+            registrada = casos.registrar.ejecutar(entrada.a_solicitud())
         response.headers["Location"] = f"{PREFIJO}/pqrs/{registrada.pqrs.id}"
         return PqrsCreada.desde(registrada)
 

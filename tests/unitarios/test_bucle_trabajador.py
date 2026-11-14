@@ -1,6 +1,7 @@
 """Ciclo del trabajador con una unidad de trabajo falsa (contexto.md 4.9, decisión D2)."""
 
 import logging
+import re
 from collections.abc import Iterator
 from contextlib import contextmanager
 
@@ -112,3 +113,30 @@ def test_un_fallo_de_la_base_no_detiene_el_ciclo(caplog: pytest.LogCaptureFixtur
 
     assert len(llamadas) == 2
     assert "No se pudo procesar la cola de clasificación (ConnectionError)" in caplog.text
+
+
+def test_el_registro_dice_donde_ocurrio_el_error_y_no_su_mensaje(caplog: pytest.LogCaptureFixture) -> None:
+    trabajador = Trabajador(Unidades(CasoFalso([7], falla_en={7})))  # type: ignore[arg-type]
+
+    with caplog.at_level(logging.ERROR, logger="radica.trabajador"):
+        trabajador.procesar_una()
+
+    assert re.search(r"PQRS 7, en test_bucle_trabajador\.py:\d+ \(ejecutar\)", caplog.text)
+    assert "texto sensible" not in caplog.text
+    assert "Traceback" not in caplog.text
+
+
+def test_un_fallo_de_la_base_tambien_dice_donde_ocurrio(caplog: pytest.LogCaptureFixture) -> None:
+    @contextmanager
+    def unidad_caida() -> Iterator[CasoFalso]:
+        trabajador.detener()
+        raise ConnectionError("la base no responde")
+        yield  # pragma: no cover
+
+    trabajador = Trabajador(unidad_caida, intervalo_s=0)  # type: ignore[arg-type]
+
+    with caplog.at_level(logging.ERROR, logger="radica.trabajador"):
+        trabajador.ejecutar()
+
+    assert re.search(r"\(ConnectionError\), en test_bucle_trabajador\.py:\d+ \(unidad_caida\)", caplog.text)
+    assert "la base no responde" not in caplog.text

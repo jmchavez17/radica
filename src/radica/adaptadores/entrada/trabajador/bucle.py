@@ -14,8 +14,10 @@ intentos de llamada_ia de esa transacción se pierden con ella.
 
 import logging
 import threading
+import traceback
 from collections.abc import Callable
 from contextlib import AbstractContextManager
+from pathlib import Path
 
 from radica.aplicacion.casos_de_uso.clasificar_pqrs import ClasificarPqrs
 
@@ -25,6 +27,19 @@ INTERVALO_S = 5.0  # contexto.md §5 no define una variable para esto
 
 # Abre una unidad de trabajo: confirma al salir sin error y deshace si hay una excepción.
 FabricaDeClasificacion = Callable[[], AbstractContextManager[ClasificarPqrs]]
+
+
+def _lugar(error: BaseException) -> str:
+    """Archivo, línea y función donde se lanzó el error, sin el mensaje ni valores.
+
+    Al registro va el tipo y este lugar, nunca el mensaje ni la traza completa:
+    podrían traer parte del texto de la PQRS.
+    """
+    marcos = traceback.extract_tb(error.__traceback__)
+    if not marcos:
+        return "lugar desconocido"
+    ultimo = marcos[-1]
+    return f"{Path(ultimo.filename).name}:{ultimo.lineno} ({ultimo.name})"
 
 
 class Trabajador:
@@ -47,8 +62,12 @@ class Trabajador:
         except Exception as error:
             if id_pqrs is None:
                 raise
-            # Solo el tipo del error: el mensaje o la traza podrían traer parte del texto.
-            registro.error("Error inesperado (%s) al clasificar la PQRS %d", type(error).__name__, id_pqrs)
+            registro.error(
+                "Error inesperado (%s) al clasificar la PQRS %d, en %s",
+                type(error).__name__,
+                id_pqrs,
+                _lugar(error),
+            )
             with self._unidad() as caso:
                 caso.registrar_error_interno(id_pqrs)
             return True
@@ -60,7 +79,11 @@ class Trabajador:
             try:
                 hubo = self.procesar_una()
             except Exception as error:
-                registro.error("No se pudo procesar la cola de clasificación (%s)", type(error).__name__)
+                registro.error(
+                    "No se pudo procesar la cola de clasificación (%s), en %s",
+                    type(error).__name__,
+                    _lugar(error),
+                )
                 hubo = False
             if not hubo:
                 self._detenido.wait(self._intervalo)

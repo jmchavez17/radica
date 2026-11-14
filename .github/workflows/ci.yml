@@ -1,0 +1,99 @@
+# Integración continua (issue #36). Corre las pruebas de Python contra PostgreSQL 16 y las
+# de la interfaz en cada push y en cada Pull Request a main. No usa secretos: las pruebas
+# no llaman a la red ni necesitan IA_API_KEY, y las llaves de cifrado las generan las
+# propias pruebas (tests/integracion/conftest.py).
+name: CI
+
+on:
+  push:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend · pytest con PostgreSQL 16
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      db:
+        # La misma imagen que el servicio db de docker-compose.yml.
+        image: postgres:16.15-trixie
+        env:
+          POSTGRES_DB: radica
+          POSTGRES_USER: radica
+          # Sin contraseña: el contenedor solo vive durante el job y solo escucha en el
+          # 127.0.0.1 del ejecutor. Así no hay ninguna credencial en el repositorio.
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 127.0.0.1:5432:5432
+        options: >-
+          --health-cmd "pg_isready -U radica -d radica"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Sin RADICA_DB_URL las 78 pruebas de integración se omiten (y el paso de abajo falla).
+      RADICA_DB_URL: postgresql+psycopg://radica@127.0.0.1:5432/radica
+      IA_PROVIDER: ninguno
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Instalar el proyecto con las dependencias de desarrollo
+        run: python -m pip install -e ".[dev]"
+
+      - name: Correr toda la suite con cobertura
+        run: python -m pytest --cov=radica --cov-report=term-missing --junitxml=resultados-pytest.xml
+
+      - name: Fallar si alguna prueba se omitió
+        shell: python
+        run: |
+          import sys
+          import xml.etree.ElementTree as ET
+
+          suites = ET.parse("resultados-pytest.xml").getroot().iter("testsuite")
+          total = omitidas = 0
+          for suite in suites:
+              total += int(suite.get("tests", 0))
+              omitidas += int(suite.get("skipped", 0))
+          print(f"{total} pruebas, {omitidas} omitidas")
+          if omitidas:
+              print("::error::Hay pruebas omitidas; revisa RADICA_DB_URL y el servicio db.")
+              sys.exit(1)
+
+  interfaz:
+    name: Interfaz · Vitest y construcción
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      # contrato.test.ts importa ../../../docs/api/openapi-implementada.json: desde
+      # web/src/pruebas es docs/api en la raíz del repositorio, que llega con el checkout
+      # completo. En Docker el mismo archivo entra por el contexto «contrato» a /docs/api.
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      # La versión de Node con la que se generó package-lock.json (web/Dockerfile).
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: "24.22.2"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      # web/.npmrc no deja que los paquetes ejecuten scripts al instalarse.
+      - run: npm ci
+      - run: npm test
+      - run: npm run build

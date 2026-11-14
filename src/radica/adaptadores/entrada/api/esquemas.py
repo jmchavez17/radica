@@ -11,8 +11,10 @@ from typing import Annotated, Any
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
 from pydantic.alias_generators import to_camel
 
+from radica.aplicacion.casos_de_uso.registrar_pqrs import SolicitudRegistro
 from radica.aplicacion.casos_de_uso.resultados import PqrsConSemaforo
 from radica.aplicacion.puertos.pqrs import ClasificacionVigente
+from radica.dominio.peticionario import DatosPeticionario
 from radica.dominio.plazos import Termino
 from radica.dominio.pqrs import EventoAuditoria, Referencia as ReferenciaDominio
 from radica.dominio.valores import (
@@ -92,6 +94,24 @@ class PqrsNueva(_Entrada):
     @classmethod
     def _opcionales(cls, valor: Any) -> Any:
         return _vacio_es_ausente(valor)
+
+    def a_solicitud(self) -> SolicitudRegistro:
+        """La entrada ya validada, como la recibe el caso de uso RegistrarPqrs."""
+        peticionario = self.peticionario
+        return SolicitudRegistro(
+            canal=self.canal,
+            sede=self.sede,
+            fecha_radicacion=self.fecha_radicacion,
+            texto=self.texto,
+            paciente_menor=self.paciente_menor_de_edad,
+            peticionario=DatosPeticionario(
+                tipo_documento=peticionario.tipo_documento,
+                numero_documento=peticionario.numero_documento,
+                nombre=peticionario.nombre,
+                telefono=peticionario.telefono,
+                correo=peticionario.correo,
+            ),
+        )
 
 
 class Referencia(_Esquema):

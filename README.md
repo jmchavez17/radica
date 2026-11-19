@@ -302,7 +302,7 @@ Recrear el proyecto desde cero, con la [CLI de Railway](https://docs.railway.com
 4. En el panel de cada servicio (Settings): el Dockerfile (`Dockerfile` o `web/Dockerfile.railway`), el comando de arranque y el healthcheck de la tabla, y en Source el repositorio, la rama `main` y «Wait for CI».
 5. `railway domain --service web --port 8080` para el dominio público.
 
-Costos: el proyecto corre con la prueba de Railway (USD 5 por 30 días, sin tarjeta). En la primera hora consumió USD 0,0014. Cuando termine la prueba hay que pasar a Hobby (USD 5 al mes): el plan Free solo admite 3 servicios por proyecto y duerme los que no reciben tráfico, como el trabajador.
+Costos: el proyecto corre con la prueba de Railway (USD 5 por 30 días, sin tarjeta). En la primera hora consumió USD 0,0014. La clave de Anthropic tiene un límite de gasto de USD 5 en la consola de Anthropic; cada clasificación cuesta unos USD 0,0003 (#37). Cuando termine la prueba hay que pasar a Hobby (USD 5 al mes): el plan Free solo admite 3 servicios por proyecto y duerme los que no reciben tráfico, como el trabajador.
 
 ## Interfaz web
 

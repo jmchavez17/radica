@@ -63,5 +63,5 @@ Costos:
 - La prueba termina a los 30 días (el 13-dic-2026, según el panel del 18-nov-2026) o al gastar USD 5. Después los servicios se detienen. Para mantenerlos hay que pasar a Hobby (USD 5 al mes), porque el plan Free solo admite 3 servicios por proyecto y duerme el trabajador.
 - La configuración de los servicios vive en Railway, no en el repositorio. Su configuración como código (`railway.json`) está obsoleta: deja de leerse el 1-dic-2026, y los servicios nuevos ya no pueden usarla. Su reemplazo (`.railway/railway.ts`) agregaría una dependencia de npm. Por eso el README documenta cada ajuste.
 - nginx usa `[fd12::10]` como DNS interno de Railway. La documentación oficial no lo da: sale de respuestas del personal de Railway en su foro.
-- La URL está abierta: no hay autenticación (#22). La interfaz muestra un aviso de datos sintéticos y el gasto en IA queda limitado (#37).
+- La URL está abierta: no hay autenticación (#22). La interfaz muestra un aviso de datos sintéticos, y la clave de Anthropic tiene un límite de gasto de USD 5 en la consola de Anthropic (#37).
 - Los servicios corren en la región `sfo` (Estados Unidos). Hoy solo se usan datos sintéticos; con datos reales habría que revisar dónde se guardan.

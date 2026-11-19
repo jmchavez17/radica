@@ -2,6 +2,8 @@
 
 [![CI](https://github.com/jmchavez17/radica/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/jmchavez17/radica/actions/workflows/ci.yml?query=branch%3Amain)
 
+**Demostración en línea: https://radica-pqrs.up.railway.app** (la API, en [/docs](https://radica-pqrs.up.railway.app/docs)). Es pública y no pide usuario ni clave: úsala solo con datos sintéticos. Cómo usarla: [docs/manual-usuario.md](docs/manual-usuario.md). Cómo está desplegada: sección [Despliegue](#despliegue-railway).
+
 Asistente de gestión de PQRS (peticiones, quejas, reclamos y sugerencias) para oficinas de atención al usuario que deben responder dentro de términos legales. Proyecto del Diplomado en Ingeniería de Software asistida por Inteligencia Artificial de la Universidad Santiago de Cali, por Jose Miguel Chávez Figueroa e Isabella Castaño Muñoz. Todo el proyecto usa datos sintéticos.
 
 ## Estado actual
@@ -20,6 +22,7 @@ Hoy contiene:
 - Una colección de Bruno en `api/bruno/`.
 - El OpenAPI que genera la API, en `docs/api/openapi-implementada.json`, comparado con el contrato en `docs/api/diferencias.md`.
 - Pruebas unitarias y de integración contra PostgreSQL. Ninguna usa la red ni la clave real.
+- El despliegue en Railway, con los mismos 4 servicios, en https://radica-pqrs.up.railway.app (ADR-08).
 
 ## Caso de uso implementado (CU-MVP)
 
@@ -74,7 +77,8 @@ Versiones fijadas en `pyproject.toml`, `web/package.json` y en las imágenes de 
 | Vitest | 5.0.5 | Pruebas de la interfaz (desarrollo) |
 | jsdom | 30.1.3 | DOM simulado para las pruebas de la interfaz (desarrollo) |
 | Node.js | Imagen `node:24.22.2-alpine3.24`, solo para construir; 26.13.0 en el equipo local, opcional | Construye y prueba la interfaz |
-| nginx | Imagen `nginxinc/nginx-unprivileged:1.30.6-alpine3.24` | Sirve la interfaz sin privilegios y lleva `/api/` y `/health` a la API |
+| nginx | Imagen `nginxinc/nginx-unprivileged:1.30.6-alpine3.24` | Sirve la interfaz sin privilegios y lleva `/api/`, `/health`, `/docs` y `/openapi.json` a la API |
+| Railway | Plataforma; CLI 5.75.0 | Despliegue de los 4 servicios (ADR-08) |
 
 ## Requisitos
 
@@ -99,6 +103,52 @@ pytest
 ```
 
 La base queda en `127.0.0.1:5433`. Usa esa dirección y no `localhost` en `RADICA_DB_URL`: en Windows, `localhost` prueba primero `::1` y cada conexión tarda minutos. Las pruebas de integración crean y borran su propia base temporal. Si `RADICA_DB_URL` no está definida, se omiten.
+
+## Pruebas
+
+Ninguna prueba usa la red ni la clave de Anthropic: el SDK se prueba con un cliente falso (`tests/unitarios/dobles.py`) y la interfaz con un doble de `fetch`. Son dos grupos, y el CI corre los dos.
+
+### API: pytest
+
+Necesitas Python 3.12 y Docker. Desde la raíz del repositorio, en PowerShell:
+
+```powershell
+py -3.12 -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -e ".[dev]"
+Copy-Item .env.example .env
+```
+
+En `.env` completa `POSTGRES_PASSWORD`, `RADICA_DB_URL`, `RADICA_LLAVE_CIFRADO` y `RADICA_LLAVE_HMAC`; `.env.example` dice cómo generar cada uno. Compose los pide aunque solo levantes la base. Luego:
+
+```powershell
+docker compose up -d --wait db
+pytest
+```
+
+Resultado esperado: `472 passed`. Las 78 pruebas de integración crean su propia base temporal en ese servidor, le aplican las migraciones y la borran; no tocan la base de desarrollo. Si `RADICA_DB_URL` no está definida, se omiten. Para ver la cobertura, como en el CI: `pytest --cov=radica --cov-report=term-missing`.
+
+### Interfaz: Vitest
+
+Necesitas Node.js (el CI y la imagen usan 24.22.2; también pasa con 26.13.0):
+
+```powershell
+cd web
+npm ci
+npm test         # resultado esperado: 44 passed
+npm run build    # tsc y vite build
+```
+
+Sin Node.js, las mismas pruebas corren en Docker: `docker build --target pruebas --progress=plain --build-context contrato=docs/api web`.
+
+### Integración continua
+
+El flujo [CI de GitHub Actions](https://github.com/jmchavez17/radica/actions/workflows/ci.yml) (`.github/workflows/ci.yml`) corre en cada push y en cada Pull Request a `main`:
+
+- **Backend:** pytest con PostgreSQL 16 como servicio y con cobertura. Falla si alguna prueba se omite.
+- **Interfaz:** `npm ci`, `npm test` y `npm run build` en `web/`.
+
+Railway solo despliega un push cuando este flujo pasa (sección [Despliegue](#despliegue-railway)).
 
 ## Migraciones y datos semilla
 
@@ -196,6 +246,64 @@ curl.exe -s http://127.0.0.1:8000/health
 curl.exe -s http://127.0.0.1:8080/health   # la misma ruta, a través de la interfaz
 ```
 
+## Despliegue (Railway)
+
+La demostración corre en Railway: **https://radica-pqrs.up.railway.app**. Por qué Railway y qué alternativas se miraron: [ADR-08](docs/adr/ADR-08-plataforma-de-despliegue.md). Son los mismos 4 servicios de Compose, en el proyecto `radica` (entorno `production`, región `sfo`). Solo `web` tiene dominio público; a la API se llega a través de nginx, como en local.
+
+| Servicio | Origen | Arranque y salud | Red |
+| --- | --- | --- | --- |
+| `db` | Imagen `postgres:16.15-trixie`, con el volumen `db-volume` en `/var/lib/postgresql/data` | El de la imagen | Privada: `db.railway.internal:5432` |
+| `api` | Este repositorio, `Dockerfile` | `/bin/sh -c "alembic upgrade head && exec uvicorn --factory radica.main:crear_aplicacion --host 0.0.0.0 --port 8000"`; healthcheck en `/health`; se reinicia si falla | Privada: `api.railway.internal:8000` |
+| `trabajador` | Este repositorio, `Dockerfile` | `radica-trabajador`; se reinicia siempre | Sin dominio; sale a la API de Anthropic |
+| `web` | Este repositorio, `web/Dockerfile.railway` | nginx; healthcheck en `/` | Pública: `radica-pqrs.up.railway.app`, al puerto 8080, con HTTPS de Railway |
+
+Variables de cada servicio. Los valores secretos no están aquí ni en el repositorio:
+
+| Servicio | Variable | Valor |
+| --- | --- | --- |
+| `db` | `POSTGRES_DB`, `POSTGRES_USER` | `radica` |
+| `db` | `POSTGRES_PASSWORD` | Secreta, generada para Railway |
+| `db` | `PGDATA` | `/var/lib/postgresql/data/pgdata`, porque el volumen trae `lost+found` en su raíz |
+| `api` | `RADICA_DB_URL` | `postgresql+psycopg://${{db.POSTGRES_USER}}:${{db.POSTGRES_PASSWORD}}@${{db.RAILWAY_PRIVATE_DOMAIN}}:5432/${{db.POSTGRES_DB}}`: referencias a las variables de `db` |
+| `api` | `RADICA_LLAVE_CIFRADO`, `RADICA_LLAVE_HMAC` | Secretas, generadas para Railway y distintas de las del `.env` |
+| `api` | `IA_API_KEY` | Secreta; la pega una persona en el panel |
+| `api` | `IA_PROVIDER`, `IA_MODEL`, `IA_TIMEOUT_S`, `IA_PRECIO_ENTRADA_USD_MTOK`, `IA_PRECIO_SALIDA_USD_MTOK`, `RADICA_UMBRAL_AMARILLO`, `RADICA_UMBRAL_CONFIANZA` | `claude` y los valores por defecto de `docker-compose.yml` |
+| `api` | `PORT` | `8000`, el puerto del healthcheck |
+| `trabajador` | Las mismas de `api`, sin `PORT` | Referencias: `RADICA_DB_URL=${{api.RADICA_DB_URL}}`, y así cada una |
+| `web` | `RADICA_RESOLVER` | `[fd12::10] ipv6=off`: el DNS interno de Railway |
+| `web` | `RADICA_API_URL` | `http://api.railway.internal:8000` |
+| `web` | `PORT` | `8080` |
+| `web` | `NGINX_ENTRYPOINT_WORKER_PROCESSES_AUTOTUNE` | `1`: un proceso de nginx por CPU del contenedor (2), no por CPU de la máquina |
+
+Qué cambió en el repositorio para desplegar, sin cambiar lo que usa Compose:
+
+- `web/nginx.conf` es una plantilla. La imagen oficial de nginx reemplaza `RADICA_RESOLVER` y `RADICA_API_URL` al arrancar; los valores por defecto, en `web/Dockerfile`, son los de Compose (`127.0.0.11 ipv6=off` y `http://api:8000`).
+- `web/Dockerfile.railway` construye la interfaz desde la raíz del repositorio, porque Railway no pasa el contexto `contrato` de Compose. Su `.dockerignore` es `web/Dockerfile.railway.dockerignore`. La prueba del contrato sigue corriendo dentro de la imagen.
+
+Cómo se despliega un cambio: al fusionar en `main`, el CI corre y, si pasa, Railway construye y despliega `api`, `trabajador` y `web` («Wait for CI» en los disparadores de cada servicio). `db` no se toca. Para comprobar:
+
+```powershell
+curl.exe -s https://radica-pqrs.up.railway.app/health   # {"estado":"ok"}
+railway service list                                    # los 4 servicios, Online
+```
+
+Recrear el proyecto desde cero, con la [CLI de Railway](https://docs.railway.com/cli) y la sesión iniciada (`railway login`), desde la raíz del repositorio en Git Bash:
+
+1. `railway init --name radica` y `railway add --service <nombre>` para `db`, `api`, `trabajador` y `web`.
+2. `railway volume --service <id de db> add --mount-path /var/lib/postgresql/data` y `railway service source connect --service db --image postgres:16.15-trixie`.
+3. Las variables de las tablas con `railway variable set CLAVE=valor --service <servicio> --skip-deploys`. Los secretos se generan y se cargan sin mostrarlos, por ejemplo:
+
+   ```bash
+   .venv/Scripts/python -c "import base64,os,sys; sys.stdout.write(base64.b64encode(os.urandom(32)).decode())" \
+     | railway variable set RADICA_LLAVE_CIFRADO --stdin --service api --skip-deploys
+   ```
+
+   No uses PowerShell 5.1 para esto: el valor llega con un BOM al principio. Nunca listes las variables con `railway variable list` sin `--json` y un filtro, porque imprime los valores.
+4. En el panel de cada servicio (Settings): el Dockerfile (`Dockerfile` o `web/Dockerfile.railway`), el comando de arranque y el healthcheck de la tabla, y en Source el repositorio, la rama `main` y «Wait for CI».
+5. `railway domain --service web --port 8080` para el dominio público.
+
+Costos: el proyecto corre con la prueba de Railway (USD 5 por 30 días, sin tarjeta). En la primera hora consumió USD 0,0014. Cuando termine la prueba hay que pasar a Hobby (USD 5 al mes): el plan Free solo admite 3 servicios por proyecto y duerme los que no reciben tráfico, como el trabajador.
+
 ## Interfaz web
 
 Una interfaz mínima en `web/`, de la sesión 7: React 19 con TypeScript (ADR-06), empaquetada con Vite y servida por nginx. Se levanta con los demás servicios:
@@ -215,7 +323,8 @@ Abre http://127.0.0.1:8080. Tiene dos pestañas:
 Cómo funciona:
 
 - **Sin lógica de negocio.** El semáforo, las horas restantes, el vencimiento, el orden y la validación los calcula la API. El formulario lleva `noValidate`: los obligatorios y el formato los dice el 400. La interfaz solo da formato a fechas y números.
-- **Mismo origen, sin CORS.** nginx sirve los archivos estáticos y lleva `/api/` y `/health` a `http://api:8000` por la red de Compose. La interfaz usa rutas relativas, así que la API no necesita CORS y `src/` no cambia. La API sigue en http://127.0.0.1:8000 para Swagger y Bruno.
+- **Mismo origen, sin CORS.** nginx sirve los archivos estáticos y lleva `/api/`, `/health`, `/docs` y `/openapi.json` a `http://api:8000` por la red de Compose. La interfaz usa rutas relativas, así que la API no necesita CORS y `src/` no cambia. Swagger queda también en http://127.0.0.1:8080/docs, con su propia `Content-Security-Policy`, porque carga Swagger UI de cdn.jsdelivr.net. La API sigue en http://127.0.0.1:8000 para Bruno.
+- **Aviso.** Bajo el encabezado, en las dos pestañas: «Demostración con datos sintéticos: no ingrese datos personales reales».
 - **Datos del peticionario.** Solo viven en el formulario hasta el registro. La interfaz no usa `localStorage`, `sessionStorage`, cookies ni la consola, y los campos del peticionario no se autocompletan. El navegador sí escribe por su cuenta en la consola cada respuesta 400 («Failed to load resource»), sin datos del peticionario.
 - **Caché.** `/api/` sale con `no-store`, `index.html` con `no-cache` y `/assets/`, que lleva un hash en el nombre, con caché larga.
 - **Contenedor.** Publicado solo en `127.0.0.1:8080`. nginx corre como el usuario 101, con el sistema de archivos de solo lectura (`/tmp` en memoria), sin capacidades, y con las cabeceras `Content-Security-Policy`, `X-Content-Type-Options` y `Referrer-Policy`.
@@ -239,6 +348,7 @@ Las pruebas están en `web/src/pruebas/` y no usan la red: un doble reemplaza `f
 
 - `api.test.ts`: el cliente de la API, para 201, 400, 500, 502 y sin conexión, y la URL de la bandeja.
 - `Registro.test.tsx` y `Bandeja.test.tsx`: los componentes, con el `act` de React.
+- `App.test.tsx`: el aviso de datos sintéticos en el registro y en la bandeja.
 - `contrato.test.ts`: compara las listas y los límites de `web/src/tipos.ts` con `docs/api/openapi-implementada.json`, que llega a la construcción por el contexto adicional `contrato`. Si la API cambia un enum, un límite o un filtro, falla.
 - `sin-almacenamiento.test.ts`: revisa que el código no use el almacenamiento del navegador ni la consola. Además, la preparación de las pruebas falla si algo escribe en la consola.
 
@@ -342,6 +452,9 @@ Dockerfile          imagen de la API y del trabajador
 
 ## Documentación
 
+- [docs/manual-usuario.md](docs/manual-usuario.md): manual de usuario de la demostración en línea.
+- [docs/requisitos.md](docs/requisitos.md): historias, criterios de aceptación y requisitos no funcionales.
+- [docs/arquitectura.md](docs/arquitectura.md): diagramas C4 del código actual y despliegue; decisiones en [docs/adr/](docs/adr/) (ADR-01 a ADR-08).
 - [docs/contexto.md](docs/contexto.md): alcance y reglas de la Entrega 3.
 - [docs/modelo-datos.md](docs/modelo-datos.md): diccionario de datos y semillas.
 - [docs/diseno/entrega-2-arquitectura.md](docs/diseno/entrega-2-arquitectura.md): arquitectura y decisiones (ADR).

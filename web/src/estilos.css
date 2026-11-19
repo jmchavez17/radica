@@ -65,6 +65,16 @@ h3 {
   background: rgb(255 255 255 / 0.18);
 }
 
+.demostracion {
+  margin: 0;
+  padding: 10px 24px;
+  background: var(--amarillo-suave);
+  color: var(--amarillo);
+  border-bottom: 1px solid #ecd27a;
+  font-weight: 600;
+  text-align: center;
+}
+
 nav {
   display: flex;
   gap: 4px;

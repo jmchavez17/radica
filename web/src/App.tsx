@@ -33,6 +33,10 @@ export function App() {
           </a>
         </nav>
       </header>
+      {/* La URL pública es una demostración abierta: nadie debe escribir datos reales. */}
+      <p className="demostracion" role="note">
+        Demostración con datos sintéticos: no ingrese datos personales reales
+      </p>
       <main>
         {vista === "registro" ? <Registro /> : <Bandeja />}
       </main>

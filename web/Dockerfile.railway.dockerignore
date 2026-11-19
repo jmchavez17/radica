@@ -1,0 +1,10 @@
+# Contexto de web/Dockerfile.railway (la raíz del repositorio): solo la interfaz y el
+# OpenAPI que usa su prueba del contrato. Nada de secretos ni dependencias locales.
+*
+!web/
+!docs/api/openapi-implementada.json
+web/node_modules/
+web/dist/
+web/Dockerfile*
+.env
+.env.*

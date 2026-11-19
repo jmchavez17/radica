@@ -248,61 +248,161 @@ curl.exe -s http://127.0.0.1:8080/health   # la misma ruta, a través de la inte
 
 ## Despliegue (Railway)
 
-La demostración corre en Railway: **https://radica-pqrs.up.railway.app**. Por qué Railway y qué alternativas se miraron: [ADR-08](docs/adr/ADR-08-plataforma-de-despliegue.md). Son los mismos 4 servicios de Compose, en el proyecto `radica` (entorno `production`, región `sfo`). Solo `web` tiene dominio público; a la API se llega a través de nginx, como en local.
+La demostración corre en Railway: **https://radica-pqrs.up.railway.app**. Son los mismos 4 servicios de Compose; solo `web` tiene dominio público, y a la API se llega a través de nginx por la red privada, como en local. Por qué Railway y qué alternativas se miraron: [ADR-08](docs/adr/ADR-08-plataforma-de-despliegue.md).
 
-| Servicio | Origen | Arranque y salud | Red |
-| --- | --- | --- | --- |
-| `db` | Imagen `postgres:16.15-trixie`, con el volumen `db-volume` en `/var/lib/postgresql/data` | El de la imagen | Privada: `db.railway.internal:5432` |
-| `api` | Este repositorio, `Dockerfile` | `/bin/sh -c "alembic upgrade head && exec uvicorn --factory radica.main:crear_aplicacion --host 0.0.0.0 --port 8000"`; healthcheck en `/health`; se reinicia si falla | Privada: `api.railway.internal:8000` |
-| `trabajador` | Este repositorio, `Dockerfile` | `radica-trabajador`; se reinicia siempre | Sin dominio; sale a la API de Anthropic |
-| `web` | Este repositorio, `web/Dockerfile.railway` | nginx; healthcheck en `/` | Pública: `radica-pqrs.up.railway.app`, al puerto 8080, con HTTPS de Railway |
+Esta sección basta para desplegar Radica en otra cuenta de Railway con lo que hay en el repositorio. Los pasos 1, 2, 4, 6 y 7 son los comandos con los que se creó el proyecto `radica` el 18-nov-2026. El paso 5 (con `railway api`) y la carga de llaves del paso 3 se probaron el 19-nov-2026 en un proyecto aparte, que la cuenta de prueba no dejó pasar de un servicio. La tabla de servicios y la de variables se compararon ese día con la configuración real de `radica`.
 
-Variables de cada servicio. Los valores secretos no están aquí ni en el repositorio:
+### Lo que necesitas
+
+- **Una cuenta de Railway conectada a GitHub.**
+  - La prueba gratuita (USD 5 por 30 días) alcanza para un proyecto.
+  - El plan Free no alcanza: admite 3 servicios por proyecto y duerme los que no reciben tráfico, como el trabajador.
+  - La prueba tampoco deja crear un segundo proyecto con sus 4 servicios mientras el primero existe: para eso hace falta Hobby (USD 5 al mes).
+- **Acceso de la app de GitHub de Railway al repositorio** (Railway → Account → GitHub → Configure repo access). Sin ese acceso, Railway puede construir un repositorio público, pero no despliega solo con cada push.
+- **La CLI de Railway** (`npm install -g @railway/cli`; aquí se usó la 5.75.0), con la sesión iniciada: `railway login`.
+- **Git Bash y Python 3.12** (`py -3.12`), para generar las llaves. No uses PowerShell 5.1 para cargarlas: el valor llega a la CLI con un BOM al principio.
+- **Una clave de la API de Anthropic.** Ponle un límite de gasto en su consola. Sin clave se puede desplegar con `IA_PROVIDER=ninguno`: la PQRS se registra con su plazo y queda pidiendo revisión.
+
+### Servicios
+
+Los nombres tienen que ser exactamente `db`, `api`, `trabajador` y `web`, porque las variables los usan para encontrarse: `${{db.POSTGRES_PASSWORD}}`, `${{api.RADICA_DB_URL}}` y `api.railway.internal`.
+
+| Servicio | Origen | Dockerfile | Comando de arranque | Healthcheck | Reinicio | Red |
+| --- | --- | --- | --- | --- | --- | --- |
+| `db` | Imagen `postgres:16.15-trixie` (la de Compose) | — | El de la imagen | — | Si falla | Volumen en `/var/lib/postgresql/data`; privada, `db.railway.internal:5432` |
+| `api` | El repositorio, rama `main` | `Dockerfile` | `/bin/sh -c "alembic upgrade head && exec uvicorn --factory radica.main:crear_aplicacion --host 0.0.0.0 --port 8000"` (migra y sirve, como en Compose) | `/health`, 120 s | Si falla, hasta 10 veces | Privada, `api.railway.internal:8000` |
+| `trabajador` | El repositorio, rama `main` | `Dockerfile` | `radica-trabajador` | — | Si falla, hasta 10 veces | Sin dominio; sale a la API de Anthropic |
+| `web` | El repositorio, rama `main` | `web/Dockerfile.railway` | El de la imagen (nginx) | `/`, 60 s | Si falla, hasta 10 veces | Dominio público, al puerto 8080, con HTTPS de Railway |
+
+### Variables
+
+Los valores secretos no están aquí ni en el repositorio; se generan para cada despliegue (ver «Llaves»).
 
 | Servicio | Variable | Valor |
 | --- | --- | --- |
 | `db` | `POSTGRES_DB`, `POSTGRES_USER` | `radica` |
-| `db` | `POSTGRES_PASSWORD` | Secreta, generada para Railway |
-| `db` | `PGDATA` | `/var/lib/postgresql/data/pgdata`, porque el volumen trae `lost+found` en su raíz |
-| `api` | `RADICA_DB_URL` | `postgresql+psycopg://${{db.POSTGRES_USER}}:${{db.POSTGRES_PASSWORD}}@${{db.RAILWAY_PRIVATE_DOMAIN}}:5432/${{db.POSTGRES_DB}}`: referencias a las variables de `db` |
-| `api` | `RADICA_LLAVE_CIFRADO`, `RADICA_LLAVE_HMAC` | Secretas, generadas para Railway y distintas de las del `.env` |
-| `api` | `IA_API_KEY` | Secreta; la pega una persona en el panel |
-| `api` | `IA_PROVIDER`, `IA_MODEL`, `IA_TIMEOUT_S`, `IA_PRECIO_ENTRADA_USD_MTOK`, `IA_PRECIO_SALIDA_USD_MTOK`, `RADICA_UMBRAL_AMARILLO`, `RADICA_UMBRAL_CONFIANZA` | `claude` y los valores por defecto de `docker-compose.yml` |
-| `api` | `PORT` | `8000`, el puerto del healthcheck |
-| `trabajador` | Las mismas de `api`, sin `PORT` | Referencias: `RADICA_DB_URL=${{api.RADICA_DB_URL}}`, y así cada una |
-| `web` | `RADICA_RESOLVER` | `[fd12::10] ipv6=off`: el DNS interno de Railway |
+| `db` | `POSTGRES_PASSWORD` | Secreta. Ver «Llaves» |
+| `db` | `PGDATA` | `/var/lib/postgresql/data/pgdata`: el volumen trae `lost+found` en su raíz y PostgreSQL no inicia en una carpeta que no está vacía |
+| `api` | `RADICA_DB_URL` | `postgresql+psycopg://${{db.POSTGRES_USER}}:${{db.POSTGRES_PASSWORD}}@${{db.RAILWAY_PRIVATE_DOMAIN}}:5432/${{db.POSTGRES_DB}}`, armada con referencias a `db` |
+| `api` | `RADICA_LLAVE_CIFRADO`, `RADICA_LLAVE_HMAC` | Secretas. Ver «Llaves» |
+| `api` | `IA_API_KEY` | Secreta: la clave de Anthropic |
+| `api` | `IA_PROVIDER` | `claude` (o `ninguno`) |
+| `api` | `IA_MODEL`, `IA_TIMEOUT_S`, `IA_PRECIO_ENTRADA_USD_MTOK`, `IA_PRECIO_SALIDA_USD_MTOK` | `claude-haiku-5-5`, `15`, `0.10` y `0.50`, como en `docker-compose.yml` |
+| `api` | `RADICA_UMBRAL_AMARILLO`, `RADICA_UMBRAL_CONFIANZA` | `0.5` y `0.75` |
+| `api` | `PORT` | `8000`: el puerto donde Railway hace el healthcheck |
+| `trabajador` | Las 11 de `api` menos `PORT` | Referencias: `RADICA_DB_URL=${{api.RADICA_DB_URL}}`, y así cada una. El trabajador usa la misma base, las mismas llaves y la misma clave |
+| `web` | `RADICA_RESOLVER` | `[fd12::10] ipv6=off`: el DNS interno de Railway, que nginx necesita para resolver `api.railway.internal` |
 | `web` | `RADICA_API_URL` | `http://api.railway.internal:8000` |
 | `web` | `PORT` | `8080` |
-| `web` | `NGINX_ENTRYPOINT_WORKER_PROCESSES_AUTOTUNE` | `1`: un proceso de nginx por CPU del contenedor (2), no por CPU de la máquina |
+| `web` | `NGINX_ENTRYPOINT_WORKER_PROCESSES_AUTOTUNE` | `1`: un proceso de nginx por CPU del contenedor, no por CPU de la máquina. Es opcional |
 
-Qué cambió en el repositorio para desplegar, sin cambiar lo que usa Compose:
+### Llaves
 
-- `web/nginx.conf` es una plantilla. La imagen oficial de nginx reemplaza `RADICA_RESOLVER` y `RADICA_API_URL` al arrancar; los valores por defecto, en `web/Dockerfile`, son los de Compose (`127.0.0.11 ipv6=off` y `http://api:8000`).
-- `web/Dockerfile.railway` construye la interfaz desde la raíz del repositorio, porque Railway no pasa el contexto `contrato` de Compose. Su `.dockerignore` es `web/Dockerfile.railway.dockerignore`. La prueba del contrato sigue corriendo dentro de la imagen.
+| Variable | Qué es | Cómo se genera |
+| --- | --- | --- |
+| `POSTGRES_PASSWORD` | Contraseña de la base. Va también dentro de `RADICA_DB_URL`, así que no puede tener `@ : / ? #` | `py -3.12 -c "import secrets,sys; sys.stdout.write(secrets.token_urlsafe(24))"` |
+| `RADICA_LLAVE_CIFRADO` | Llave AES-256-GCM de los datos del peticionario: 32 bytes en base64 | `py -3.12 -c "import base64,os,sys; sys.stdout.write(base64.b64encode(os.urandom(32)).decode())"` |
+| `RADICA_LLAVE_HMAC` | Llave del HMAC del documento: 32 bytes en base64, distinta de la anterior | El mismo comando, otra vez |
+| `IA_API_KEY` | Clave de la API de Anthropic | En la consola de Anthropic |
 
-Cómo se despliega un cambio: al fusionar en `main`, el CI corre y, si pasa, Railway construye y despliega `api`, `trabajador` y `web` («Wait for CI» en los disparadores de cada servicio). `db` no se toca. Para comprobar:
+Son nuevas para cada despliegue: no reutilices las del `.env`. No las cambies después de registrar PQRS, porque los datos cifrados con la llave anterior ya no se podrían leer. En el paso 3 se generan y se cargan en un solo comando, sin que el valor salga en pantalla. Para no imprimir valores, nunca uses `railway variable list` sin `--json` y un filtro.
 
-```powershell
-curl.exe -s https://radica-pqrs.up.railway.app/health   # {"estado":"ok"}
-railway service list                                    # los 4 servicios, Online
-```
+### Paso a paso
 
-Recrear el proyecto desde cero, con la [CLI de Railway](https://docs.railway.com/cli) y la sesión iniciada (`railway login`), desde la raíz del repositorio en Git Bash:
+En Git Bash, desde la raíz de un clon del repositorio. Reemplaza `<dueño>/radica` por tu repositorio o tu fork.
 
-1. `railway init --name radica` y `railway add --service <nombre>` para `db`, `api`, `trabajador` y `web`.
-2. `railway volume --service <id de db> add --mount-path /var/lib/postgresql/data` y `railway service source connect --service db --image postgres:16.15-trixie`.
-3. Las variables de las tablas con `railway variable set CLAVE=valor --service <servicio> --skip-deploys`. Los secretos se generan y se cargan sin mostrarlos, por ejemplo:
+1. **Proyecto y servicios vacíos.** Si `railway add` pregunta por una variable, pulsa Enter.
 
    ```bash
-   .venv/Scripts/python -c "import base64,os,sys; sys.stdout.write(base64.b64encode(os.urandom(32)).decode())" \
-     | railway variable set RADICA_LLAVE_CIFRADO --stdin --service api --skip-deploys
+   export MSYS_NO_PATHCONV=1      # que Git Bash no convierta rutas como /var/lib/... en rutas de Windows
+   railway init --name radica
+   for s in db api trabajador web; do railway add --service $s; done
    ```
 
-   No uses PowerShell 5.1 para esto: el valor llega con un BOM al principio. Nunca listes las variables con `railway variable list` sin `--json` y un filtro, porque imprime los valores.
-4. En el panel de cada servicio (Settings): el Dockerfile (`Dockerfile` o `web/Dockerfile.railway`), el comando de arranque y el healthcheck de la tabla, y en Source el repositorio, la rama `main` y «Wait for CI».
-5. `railway domain --service web --port 8080` para el dominio público.
+2. **Variables de `db`, `api`, `trabajador` y `web`.** Van antes de conectar el código, para que el primer despliegue arranque bien:
 
-Costos: el proyecto corre con la prueba de Railway (USD 5 por 30 días, sin tarjeta). En la primera hora consumió USD 0,0014. La clave de Anthropic tiene un límite de gasto de USD 5 en la consola de Anthropic; cada clasificación cuesta unos USD 0,0003 (#37). Cuando termine la prueba hay que pasar a Hobby (USD 5 al mes): el plan Free solo admite 3 servicios por proyecto y duerme los que no reciben tráfico, como el trabajador.
+   ```bash
+   railway variable set POSTGRES_DB=radica POSTGRES_USER=radica PGDATA=/var/lib/postgresql/data/pgdata --service db --skip-deploys
+   railway variable set 'RADICA_DB_URL=postgresql+psycopg://${{db.POSTGRES_USER}}:${{db.POSTGRES_PASSWORD}}@${{db.RAILWAY_PRIVATE_DOMAIN}}:5432/${{db.POSTGRES_DB}}' \
+     IA_PROVIDER=claude IA_MODEL=claude-haiku-5-5 IA_TIMEOUT_S=15 IA_PRECIO_ENTRADA_USD_MTOK=0.10 IA_PRECIO_SALIDA_USD_MTOK=0.50 \
+     RADICA_UMBRAL_AMARILLO=0.5 RADICA_UMBRAL_CONFIANZA=0.75 PORT=8000 --service api --skip-deploys
+   for v in RADICA_DB_URL RADICA_LLAVE_CIFRADO RADICA_LLAVE_HMAC RADICA_UMBRAL_AMARILLO RADICA_UMBRAL_CONFIANZA \
+            IA_PROVIDER IA_MODEL IA_API_KEY IA_TIMEOUT_S IA_PRECIO_ENTRADA_USD_MTOK IA_PRECIO_SALIDA_USD_MTOK; do
+     railway variable set "$v=\${{api.$v}}" --service trabajador --skip-deploys
+   done
+   railway variable set 'RADICA_RESOLVER=[fd12::10] ipv6=off' RADICA_API_URL=http://api.railway.internal:8000 PORT=8080 \
+     NGINX_ENTRYPOINT_WORKER_PROCESSES_AUTOTUNE=1 --service web --skip-deploys
+   ```
+
+3. **Llaves**, generadas y cargadas sin mostrarlas. `IA_API_KEY` se pega en el panel: servicio `api` → Variables → New Variable.
+
+   ```bash
+   py -3.12 -c "import secrets,sys; sys.stdout.write(secrets.token_urlsafe(24))" | railway variable set POSTGRES_PASSWORD --stdin --service db --skip-deploys
+   for v in RADICA_LLAVE_CIFRADO RADICA_LLAVE_HMAC; do
+     py -3.12 -c "import base64,os,sys; sys.stdout.write(base64.b64encode(os.urandom(32)).decode())" | railway variable set $v --stdin --service api --skip-deploys
+   done
+   ```
+
+4. **La base.** El volumen se crea con el id del servicio: en la CLI 5.75.0, `--service db` con el nombre falla.
+
+   ```bash
+   DB=$(railway service list --json | py -3.12 -c "import json,sys; print(next(s['id'] for s in json.load(sys.stdin) if s['name']=='db'))")
+   railway volume --service "$DB" add --mount-path /var/lib/postgresql/data
+   railway service source connect --service db --image postgres:16.15-trixie
+   ```
+
+5. **Ajustes de `api`, `trabajador` y `web`.** Se toman de la tabla «Servicios». En el panel están en servicio → Settings: Dockerfile Path, Custom Start Command, Healthcheck Path y Restart Policy. Con la CLI:
+
+   ```bash
+   ENTORNO=$(railway status --json | py -3.12 -c "import json,sys; print(json.load(sys.stdin)['environments']['edges'][0]['node']['id'])")
+   id_de() { railway service list --json | py -3.12 -c "import json,sys; print(next(s['id'] for s in json.load(sys.stdin) if s['name']=='$1'))"; }
+   ajustar() {
+     railway api 'mutation($s: String!, $e: String, $i: ServiceInstanceUpdateInput!) { serviceInstanceUpdate(serviceId: $s, environmentId: $e, input: $i) }' \
+       --raw-var s="$(id_de $1)" --raw-var e="$ENTORNO" --var i="$2"
+   }
+   ajustar api '{"dockerfilePath": "Dockerfile", "startCommand": "/bin/sh -c \"alembic upgrade head && exec uvicorn --factory radica.main:crear_aplicacion --host 0.0.0.0 --port 8000\"", "healthcheckPath": "/health", "healthcheckTimeout": 120, "restartPolicyType": "ON_FAILURE", "restartPolicyMaxRetries": 10}'
+   ajustar trabajador '{"dockerfilePath": "Dockerfile", "startCommand": "radica-trabajador", "restartPolicyType": "ON_FAILURE", "restartPolicyMaxRetries": 10}'
+   ajustar web '{"dockerfilePath": "web/Dockerfile.railway", "healthcheckPath": "/", "healthcheckTimeout": 60, "restartPolicyType": "ON_FAILURE", "restartPolicyMaxRetries": 10}'
+   ```
+
+6. **Conectar el código.** Cada conexión dispara el primer despliegue:
+
+   ```bash
+   for s in api trabajador web; do railway service source connect --service $s --repo <dueño>/radica --branch main; done
+   ```
+
+   Después, en el panel de cada uno (Settings → Source), activa «Wait for CI», para que solo se despliegue lo que pasó el CI. Hazlo al final: `source connect` vuelve a crear el disparador y lo deja desactivado.
+
+7. **Dominio público:**
+
+   ```bash
+   railway domain --service web --port 8080
+   ```
+
+8. **Comprobar.**
+
+   ```bash
+   railway service list                          # los 4 servicios, Online
+   curl -s https://<tu dominio>/health           # {"estado":"ok"}
+   ```
+
+   En la interfaz, registra una PQRS sintética. Con `IA_PROVIDER=claude`, en unos segundos `GET /api/v1/pqrs/{id}` muestra `estadoIa: COMPLETADA` y una clasificación con origen `IA`.
+
+### Cómo se despliega un cambio
+
+Al fusionar en `main` corre el CI y, si pasa, Railway construye y despliega `api`, `trabajador` y `web`; `db` no se toca. Si fusiona alguien que no es miembro del proyecto en Railway, como pasó con el PR #50, el despliegue queda en «Needs approval» hasta que un miembro lo apruebe en el panel. Mientras tanto sigue en línea el despliegue anterior.
+
+### Qué cambió en el repositorio para desplegar
+
+Nada de esto cambia lo que usa Compose:
+
+- `web/nginx.conf` es una plantilla. La imagen oficial de nginx reemplaza `RADICA_RESOLVER` y `RADICA_API_URL` al arrancar; los valores por defecto, en `web/Dockerfile`, son los de Compose (`127.0.0.11 ipv6=off` y `http://api:8000`).
+- `web/Dockerfile.railway` construye la interfaz desde la raíz del repositorio, porque Railway no pasa el contexto `contrato` de Compose. Su `.dockerignore` es `web/Dockerfile.railway.dockerignore`, y la prueba del contrato sigue corriendo dentro de la imagen.
+
+### Costos
+
+- **Railway:** el proyecto corre con la prueba (USD 5 por 30 días, sin tarjeta); en la primera hora consumió USD 0,0014. Cuando termine la prueba hay que pasar a Hobby (USD 5 al mes), porque el plan Free solo admite 3 servicios por proyecto y duerme el trabajador.
+- **Anthropic:** la clave tiene un límite de gasto de USD 5 en su consola, y cada clasificación cuesta unos USD 0,0003 (#37).
 
 ## Interfaz web
 

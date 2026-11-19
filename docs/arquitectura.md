@@ -4,6 +4,8 @@ Lo que corre hoy en `main` (14-nov-2026, commit `8e2f5ef`). Los dos diagramas sa
 
 Los `.drawio` y `.png` de [`docs/diseno/`](diseno/) son el diseño de la Entrega 2 y no se actualizan. Lo que el diseño tiene y el código todavía no está en la sección 3.
 
+Actualizado el 18-nov-2026 con el despliegue en Railway (PR #48): los mismos 4 contenedores corren en https://radica-pqrs.up.railway.app (sección 2.1 y [ADR-08](adr/ADR-08-plataforma-de-despliegue.md)).
+
 ## 1. Contexto (C4, nivel 1)
 
 ```mermaid
@@ -46,7 +48,7 @@ C4Container
     }
 
     Rel(funcionario, web, "Registra y consulta", "HTTP, 127.0.0.1:8080")
-    Rel(web, api, "Proxy de /api/ y /health", "HTTP, api:8000")
+    Rel(web, api, "Proxy de /api/, /health y /docs", "HTTP, api:8000")
     Rel(api, db, "Lee y escribe", "SQL, psycopg 3, TCP 5432")
     Rel(trabajador, db, "Toma pendientes y guarda", "SQL, psycopg 3, TCP 5432")
     Rel(trabajador, anthropic, "Texto enmascarado", "HTTPS, SDK anthropic")
@@ -58,7 +60,7 @@ C4Container
 
 | Contenedor | Tecnología | Responsabilidad | Dónde está en el código |
 | --- | --- | --- | --- |
-| `web` | React 19.3.1 y TypeScript 7.0.2, empaquetados con Vite 8.3.5; nginx 1.30.6 sin privilegios | Sirve la interfaz y lleva `/api/` y `/health` a la API en el mismo origen, así que la API no necesita CORS. No tiene lógica de negocio. | `web/package.json`, `web/Dockerfile`, `web/nginx.conf:22-40` |
+| `web` | React 19.3.1 y TypeScript 7.0.2, empaquetados con Vite 8.3.5; nginx 1.30.6 sin privilegios | Sirve la interfaz y lleva `/api/`, `/health`, `/docs` y `/openapi.json` a la API en el mismo origen, así que la API no necesita CORS. No tiene lógica de negocio. | `web/package.json`, `web/Dockerfile`, `web/nginx.conf:18-61` |
 | `api` | Python 3.12, FastAPI 0.162.0, uvicorn 0.54.0, Pydantic 2.14.2 | Registro, consulta, bandeja, historial, términos y reintento de la IA. Antes de servir corre `alembic upgrade head`. No llama a la IA: su clasificador es el de palabras clave. | `docker-compose.yml:45-61`; `src/radica/main.py:77-118` |
 | `trabajador` | La misma imagen que `api`, con el comando `radica-trabajador` | Cada 5 s toma la PQRS pendiente más antigua con `SELECT … FOR UPDATE SKIP LOCKED`, verifica el enmascaramiento y la clasifica con Claude o, si Claude falla, con las palabras clave. | `docker-compose.yml:63-80`; `src/radica/main.py:62-74` y `126-158`; `src/radica/adaptadores/entrada/trabajador/bucle.py`; `src/radica/adaptadores/salida/postgres/repositorios.py:245-251` |
 | `db` | PostgreSQL 16.15 (`postgres:16.15-trixie`) | Las 13 tablas del modelo v1.1, creadas por las migraciones de Alembic. | `docker-compose.yml:27-43`; `migraciones/versions/` |
@@ -67,7 +69,20 @@ Notas:
 
 - Solo el trabajador habla con Anthropic. La API registra sin esperar a la IA (ADR-04).
 - La API también se publica en `127.0.0.1:8000` (Swagger y la colección de Bruno de `api/bruno/`) y la base en `127.0.0.1:5433` (Alembic y las pruebas desde el equipo). Ninguno de los tres puertos sale del equipo: todos están atados a `127.0.0.1`.
-- No hay HTTPS entre el navegador y `web` ni TLS entre los contenedores y `db`. Ver la sección 3.
+- En local no hay HTTPS entre el navegador y `web`, y en ningún entorno hay TLS entre los contenedores y `db`. Ver la sección 3.
+
+### 2.1 Despliegue en Railway
+
+El diagrama vale también para Railway ([ADR-08](adr/ADR-08-plataforma-de-despliegue.md)): un proyecto `radica` con un servicio por contenedor. Lo que cambia es cómo se llega a cada uno:
+
+| Contenedor | En Compose (local) | En Railway |
+| --- | --- | --- |
+| `web` | `127.0.0.1:8080`, por HTTP | https://radica-pqrs.up.railway.app, el único con dominio público. Railway termina el HTTPS. Se construye con `web/Dockerfile.railway` |
+| `api` | `api:8000` en la red de Compose; también `127.0.0.1:8000` | `api.railway.internal:8000`, solo por la red privada. nginx lo resuelve con el DNS interno `[fd12::10]` (variables `RADICA_RESOLVER` y `RADICA_API_URL` de `web/nginx.conf`) |
+| `trabajador` | Sin puertos | Sin dominio; sale a la API de Anthropic por HTTPS |
+| `db` | `db:5432`; también `127.0.0.1:5433` | `db.railway.internal:5432`, sin puerto público. Los datos van en un volumen |
+
+La configuración de cada servicio (comando, healthcheck, variables y disparadores) está en el README, sección «Despliegue».
 
 ## 3. Diferencias con el diseño de la Entrega 2
 
@@ -85,7 +100,7 @@ Lo que aparece en [`docs/diseno/01_contexto_C4.png`](diseno/01_contexto_C4.png) 
 | Servicio de correo institucional (SMTP) | No hay notificador | PB-26 (sin issue) |
 | Hoja de seguimiento de la oficina: reporte semaforizado en CSV | No hay exportación | PB-28 (sin issue) |
 | Gemini 3.1 Flash-Lite como proveedor alterno | `IA_PROVIDER` solo admite `claude` o `ninguno` (`src/radica/config.py:23-25`) | ADR-05; sin issue |
-| HTTPS entre las personas y Radica | La interfaz se sirve por HTTP en `127.0.0.1:8080` | PB-25 (#20), al publicar |
+| HTTPS entre las personas y Radica | En Railway, por HTTPS en https://radica-pqrs.up.railway.app. En local sigue por HTTP en `127.0.0.1:8080` | PB-25 (#20), resuelto en Railway |
 | Conexión cifrada con PostgreSQL | `RADICA_DB_URL` no pide TLS; la base solo está en la red de Compose y en `127.0.0.1` | Sin issue |
 
 ## 4. Decisiones
@@ -101,3 +116,4 @@ Cada decisión tiene su ADR en [`docs/adr/`](adr/). ADR-01 a ADR-06 vienen de `d
 | [ADR-05](adr/ADR-05-proveedor-de-ia.md) | Proveedor de IA: Claude Haiku 5.5, con Gemini como alterno | Provisional, aplicada en parte: sin Gemini |
 | [ADR-06](adr/ADR-06-tecnologias.md) | Tecnologías: Python 3.12, FastAPI, SQLAlchemy, PostgreSQL 16 y React con TypeScript | Aceptada el 31-oct-2026 |
 | [ADR-07](adr/ADR-07-base-de-datos-postgresql.md) | Base de datos: PostgreSQL 16 | Aceptada el 14-nov-2026; detalla ADR-06 |
+| [ADR-08](adr/ADR-08-plataforma-de-despliegue.md) | Plataforma de despliegue: Railway, frente a Render y Fly.io | Aceptada el 18-nov-2026 |
